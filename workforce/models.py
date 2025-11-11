@@ -147,6 +147,10 @@ class ChatMessage(models.Model):
   )
 
   class Meta:
+    db_table = 'accounts_chatmessage'  # old table name
+    ordering = ['-created_at']
+
+  class Meta:
       ordering = ["-created_at"]
       indexes = [
           models.Index(fields=["created_at"]),
@@ -230,6 +234,10 @@ class Event(models.Model):
         related_name="events",
         help_text="Leave blank for general church-wide events",
     )
+  
+  class Meta:
+      db_table = 'accounts_event'  # old table name
+      ordering = ['date', 'day_of_week', 'time']
 
   class Meta:
       verbose_name = "Event"
@@ -263,6 +271,10 @@ class AttendanceRecord(models.Model):
   status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='absent')
   remarks = models.TextField(blank=True)
   timestamp = models.DateTimeField(auto_now_add=True)
+
+  class Meta:
+      db_table = 'accounts_attendancerecord'  # old table name
+      ordering = ['-date']
 
   class Meta:
       unique_together = ('user', 'event', 'date')
@@ -323,6 +335,10 @@ class PersonalReminder(models.Model):
   is_done = models.BooleanField(default=False)
 
   class Meta:
+      db_table = 'accounts_personalreminder'  # old table name
+      ordering = ['date', 'time']
+
+  class Meta:
       ordering = ['date', 'time']
 
   def __str__(self):
@@ -345,6 +361,10 @@ class UserActivity(models.Model):
   guest_id = models.CharField(max_length=50, blank=True, null=True)  # Optional
   description = models.TextField(blank=True, null=True)
   created_at = models.DateTimeField(default=timezone.now)
+
+  class Meta:
+      db_table = 'accounts_useractivity'  # old table name
+      ordering = ['-created_at']
 
   class Meta:
       ordering = ["-created_at"]

@@ -47,19 +47,19 @@ class Migration(migrations.Migration):
             name='last_active',
             field=models.DateTimeField(blank=True, null=True),
         ),
-        migrations.DeleteModel(
-            name='AttendanceRecord',
-        ),
-        migrations.DeleteModel(
-            name='ChatMessage',
-        ),
-        migrations.DeleteModel(
-            name='Event',
-        ),
-        migrations.DeleteModel(
-            name='PersonalReminder',
-        ),
-        migrations.DeleteModel(
-            name='UserActivity',
-        ),
+        #migrations.DeleteModel(
+        #    name='AttendanceRecord',
+        #),
+        #migrations.DeleteModel(
+        #    name='ChatMessage',
+        #),
+        #migrations.DeleteModel(
+        #    name='Event',
+        #),
+        #migrations.DeleteModel(
+        #    name='PersonalReminder',
+        #),
+        #migrations.DeleteModel(
+        #    name='UserActivity',
+        #),
     ]
