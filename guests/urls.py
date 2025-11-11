@@ -3,7 +3,7 @@ from . import views
 
 urlpatterns = [
     # Default page: Guest List
-    path('', views.guest_list_view, name='guest_list'),
+    path('guests/', views.guest_list_view, name='guest_list'),
 
     # Chart Dashboard
     path('dashboard/', views.dashboard_view, name='dashboard'),

@@ -1,0 +1,43 @@
+<li class="user-card-wrapper">
+  <div class="card border-0 user-card {{ user.color_class }}">
+    <div class="card-body px-1 my-0 py-0 d-flex justify-content-center">
+      <div class="me-1 mt-2">
+        <a href="tel:{{ user.phone_number }}" title="{{ user.title|default:'' }} {{ user.full_name }}">
+          {% if user.image %}
+            <span class="avatar rounded"
+                  style="background-image: url('{{ user.image.url }}'); width:40px; height:40px; background-size:cover; background-position:center;">
+            </span>
+          {% else %}
+            <span class="avatar bg-gray text-white d-flex align-items-center justify-content-center rounded"
+                  style="width:40px; height:40px; font-weight:bold; font-size:12px;">
+              {{ user.initials }}
+            </span>
+          {% endif %}
+        </a>
+      </div>
+
+      <div class="flex-grow-1 py-1 text-start justify-content-center">
+        <div class="fw-bold text-truncate user-name" style="color: var(--tblr-{{ user.color }}); font-size: 0.75rem">
+          {{ user.title|default:"" }} {{ user.full_name }}
+        </div>
+        <div class="mt-1 fst-italic" style="font-size: 0.6rem">
+          {% with memberships=user.team_memberships.all %}
+            {% if memberships %}
+              <div class="user-team">
+                <div class="team-container position-relative overflow-hidden d-inline-block px-1 py-0 rounded-pill bg-gray-lt"
+                    data-user="{{ user.id }}">
+                  {% for m in memberships %}
+                    <div class="team-item {{ m.team.color_class|default:'bg-gray' }} text-white px-1 mb-0 
+                                {% if not forloop.first %}d-none{% endif %}">
+                      <span class="fst-italic">{{ m.team.name }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+  </div>
+</li>

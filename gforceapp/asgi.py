@@ -1,5 +1,5 @@
 """
-ASGI config for gatewaymagnetapp project.
+ASGI config for gforceapp project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
@@ -7,18 +7,18 @@ For more information on this file, see
 https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 """
 
-# gatewaymagnetapp/asgi.py
+# gforceapp/asgi.py
 import os
 
 # MUST come first
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gatewaymagnetapp.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gforceapp.settings')
 
 from django.core.asgi import get_asgi_application
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 
 import notifications.routing
-import accounts.routing  # OK now because Django settings are configured
+import workforce.routing  # OK now because Django settings are configured
 
 django_asgi_app = get_asgi_application()
 
@@ -27,7 +27,7 @@ application = ProtocolTypeRouter({
     "websocket": AuthMiddlewareStack(
         URLRouter(
             notifications.routing.websocket_urlpatterns
-            + accounts.routing.websocket_urlpatterns
+            + workforce.routing.websocket_urlpatterns
         )
     ),
 })

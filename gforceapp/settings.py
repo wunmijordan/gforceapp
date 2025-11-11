@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     "django_htmx",
 
     # Your apps
+    "workforce.apps.WorkforceConfig",
+    "magnet.apps.MagnetConfig",
     "guests.apps.GuestsConfig",
     "accounts.apps.AccountsConfig",
     "notifications.apps.NotificationsConfig",
@@ -83,9 +85,9 @@ if DEBUG:
 # =========================
 # URLS & TEMPLATES
 # =========================
-ROOT_URLCONF = "gatewaymagnetapp.urls"
-WSGI_APPLICATION = "gatewaymagnetapp.wsgi.application"
-ASGI_APPLICATION = "gatewaymagnetapp.asgi.application"
+ROOT_URLCONF = "gforceapp.urls"
+WSGI_APPLICATION = "gforceapp.wsgi.application"
+ASGI_APPLICATION = "gforceapp.asgi.application"
 
 TEMPLATES = [
     {
@@ -195,9 +197,9 @@ CLOUDINARY_STORAGE = {
 # =========================
 # PWA CONFIGURATION
 # =========================
-PWA_APP_NAME = "Gateway Nation Magnet App"
-PWA_APP_SHORT_NAME = "Magnet"
-PWA_APP_DESCRIPTION = "Guest Management System for Gateway Nation"
+PWA_APP_NAME = "Gateway Nation Workforce App"
+PWA_APP_SHORT_NAME = "GForceApp"
+PWA_APP_DESCRIPTION = "Workforce Hub for Gateway Nation"
 PWA_APP_THEME_COLOR = "#2e303e"
 PWA_APP_BACKGROUND_COLOR = "#2e303e"
 PWA_APP_DISPLAY = "standalone"
@@ -223,7 +225,7 @@ PWA_APP_LANG = "en-US"
 # AUTHENTICATION & SESSIONS
 # =========================
 AUTH_USER_MODEL = "accounts.CustomUser"
-LOGIN_REDIRECT_URL = "/accounts/chat/"
+LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load form_tags %}
-{% load group_tags %}
+{% load access_tags %}
 
 {% get_media_prefix as MEDIA_URL %}
 
@@ -435,7 +435,7 @@
 
             <!-- Buttons -->
             <div class="mt-4 d-flex gap-2">
-              {% if request.user|has_group:"Pastor,Team Lead,Admin,Registrant" or guest.assigned_to == request.user or guest.full_name == "Wunmi Jordan" %}
+              {% if request.user|is_magnet_admin or guest.assigned_to == request.user or guest.full_name == "Wunmi Jordan" %}
                 <button type="submit" name="save_return" class="btn btn-success">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                       viewBox="0 0 24 24" fill="none" stroke="currentColor" 
@@ -462,7 +462,7 @@
                   Save
                 </button>
               {% endif %}
-              {% if request.user|has_group:"Pastor,Team Lead,Admin,Registrant" %}
+              {% if request.user|is_magnet_admin %}
                 <button type="submit" name="save_add_another" class="btn">
                   <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-reload">
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>

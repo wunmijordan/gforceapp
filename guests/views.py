@@ -25,7 +25,6 @@ from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.template.loader import render_to_string, get_template
 import weasyprint
 #from .utils import get_week_start_end
-from guests.models import GuestEntry
 from django.utils.dateparse import parse_date
 from django.db.models.functions import ExtractYear, ExtractMonth, TruncMonth
 import calendar
@@ -41,22 +40,24 @@ from django.middleware.csrf import get_token
 from urllib.parse import urlencode
 from django.conf import settings
 from cloudinary.uploader import upload as cloudinary_upload
-from accounts.models import CustomUser, Event, AttendanceRecord, PersonalReminder
+from accounts.models import CustomUser, TeamMembership
+from workforce.models import Event, AttendanceRecord, PersonalReminder, Team
 from urllib.parse import urlencode
-from accounts.utils import user_in_groups
-
-
-
+from accounts.utils import (
+    user_in_groups,
+    is_project_wide_admin,
+    is_magnet_admin,
+    is_team_admin,
+    is_project_admin,
+    is_project_level_role,
+    user_in_team,
+)
+from workforce.consumers import get_user_color
+from workforce.utils import get_available_events_for_user, get_calendar_items, expand_team_events, get_visible_clock_records
 
 
 
 User = get_user_model()
-
-
-
-
-
-
 
 
 @login_required
@@ -64,10 +65,11 @@ def dashboard_view(request):
     """Main dashboard view with server-rendered stats for cards and charts."""
     user = request.user
     current_year = datetime.now().year
+    last_30_days = timezone.now() - timedelta(days=30)
     guest_entries = GuestEntry.objects.all()  # all guest entries for available years filter
 
     # Queryset for filtered data cards, charts (role based)
-    if user_in_groups(request.user, "Pastor,Team Lead,Registrant,Admin"):
+    if is_magnet_admin(request.user):
         queryset = GuestEntry.objects.all()
     else:
         queryset = GuestEntry.objects.filter(assigned_to=user)
@@ -227,9 +229,72 @@ def dashboard_view(request):
     #with open(image_path, 'rb') as img:
     #    image_data_uri = f"data:image/png;base64,{base64.b64encode(img.read()).decode()}"
 
-    # Add all users except the logged-in user
-    other_users = User.objects.exclude(id=request.user.id)
+    # Get all teams the user belongs to
+    user_teams = Team.objects.filter(memberships__user=request.user).distinct()
+
+    # Fetch other users who belong to any of those same teams
+    other_users = CustomUser.objects.filter(
+        team_memberships__team__in=user_teams
+    ).exclude(id=request.user.id).distinct()
+
+    # Exclude project-level admins
+    other_users = [u for u in other_users if not is_project_admin(u)]
+
+    # Assign color for each user card
+    for user in other_users:
+        user.color = get_user_color(user.id)
+
+    # Precompute: list of (team, members) pairs
+    team_member_pairs = []
+    for team in user_teams:
+        members = [u for u in other_users if u.team_memberships.filter(team=team).exists()]
+        team_member_pairs.append((team, members)) 
+
     calendar_items = get_calendar_items(request.user)
+    clock_records = get_visible_clock_records(request.user, since_date=last_30_days)
+
+    today = timezone.localdate()
+
+    # Count totals
+    total_clock_in = clock_records.filter(clock_in__isnull=False).count()
+    total_clock_out = clock_records.filter(clock_out__isnull=False).count()
+
+    # Optional: today’s record
+    today_record = clock_records.filter(date=today).first()
+
+    # === Upcoming Events (Team + GForce) ===
+    events = []
+
+    # Get all accessible events (including all teams)
+    base_events = get_available_events_for_user(request.user)
+
+    for team in [None] + list(Team.objects.all()):
+        team_id = getattr(team, "id", None)
+        expanded = expand_team_events(request.user, team_id)
+        events.extend(expanded)
+
+    upcoming_events = [e for e in events if e["date"] >= today]
+    upcoming_events.sort(key=lambda e: e["date"])
+
+    # === Next available events for the week ===
+    start_of_week = today - timedelta(days=today.weekday())  # Monday start
+    start_of_sunday = start_of_week - timedelta(days=1)      # Adjust to Sunday start
+    end_of_week = start_of_sunday + timedelta(days=7)        # Sunday → Sunday window
+
+    # Filter the user's events for this week (including GForce)
+    weekly_events = [
+        e for e in upcoming_events
+        if start_of_sunday <= e["date"] <= end_of_week
+        and (e.get("team_id") in [t.id for t in user_teams] or e.get("team_id") is None)
+    ]
+
+    weekly_events.sort(key=lambda e: (e["date"], e.get("time", "")))
+    # ✅ Add full ISO datetime for countdowns
+    for e in weekly_events:
+        e["datetime_iso"] = (
+            f"{e['date']}T{e['time']}" if e.get("time") else f"{e['date']}T00:00:00"
+        )
+    next_events = weekly_events  # limit display to next 5 just in case
 
 
     context = {
@@ -268,7 +333,15 @@ def dashboard_view(request):
         "special_programme_count": special_programme_count,
         "special_programme_percentage": special_programme_percentage,
         "other_users": other_users,
+        "user_teams": user_teams,
+        "team_member_pairs": team_member_pairs,
         "calendar_items": calendar_items,
+        'total_clock_in': total_clock_in,
+        'total_clock_out': total_clock_out,
+        'today_clock_in': getattr(today_record, 'clock_in', None),
+        'today_clock_out': getattr(today_record, 'clock_out', None),
+        "available_events": upcoming_events,
+        "next_events_for_week": next_events,
         "page_title": "Dashboard"
     }
     #return HttpResponseForbidden("Dashboard temporarily disabled.")
@@ -411,7 +484,7 @@ def guest_list_view(request):
     view_type = request.GET.get('view', 'cards')
 
     # --- Base queryset ---
-    if user_in_groups(request.user, "Pastor,Team Lead,Registrant,Message Manager,Admin,Demo"):
+    if is_magnet_admin(user):
         queryset = GuestEntry.objects.all()
     else:
         queryset = GuestEntry.objects.filter(
@@ -451,7 +524,7 @@ def guest_list_view(request):
     ).order_by('-custom_id')
 
     # --- Pagination ---
-    per_page = 50 if view_type == 'list' else 12
+    per_page = 50 if view_type == 'list' else 45
     paginator = Paginator(queryset, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
@@ -548,6 +621,8 @@ def guest_list_view(request):
     params.pop('page', None)
     query_string = urlencode(params)
 
+    magnet_team = Team.objects.filter(name__iexact="magnet").first()
+
     # --- Context ---
     context = {
         'page_obj': page_obj,
@@ -568,6 +643,10 @@ def guest_list_view(request):
         'query_string': query_string,
         'role': role,
         'svg_icons': svg_icons,
+        "magnet_team": {
+            "id": magnet_team.id,
+            "name": magnet_team.name,
+        } if magnet_team else None,
         'page_title': 'Guests',
     }
 
@@ -748,7 +827,7 @@ def edit_guest(request, pk):
     if guest.full_name == "Wunmi Jordan":
         # Allow everyone to edit this guest, but restrict certain actions
         pass
-    elif not (user_in_groups(request.user, "Pastor,Team Lead,Admin") or guest.assigned_to == user):
+    elif not (is_magnet_admin(user) or guest.assigned_to == user):
         messages.error(request, "You do not have permission to edit this guest.")
         return redirect('guest_list')
 
@@ -975,8 +1054,9 @@ def update_guest_status(request, pk):
     Only the creator or an admin can update.
     """
     guest = get_object_or_404(GuestEntry, pk=pk)
+    user = request.user
 
-    if not (user_in_groups(request.user, "Pastor,Team Lead,Admin") or guest.assigned_to == user):
+    if not (is_magnet_admin(user) or guest.assigned_to == user):
         return redirect('guest_list')
 
     new_status = request.POST.get('status')
@@ -1501,9 +1581,9 @@ from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from accounts.models import Event, AttendanceRecord, UserActivity
-from accounts.utils import validate_church_proximity
-from accounts.broadcast import broadcast_attendance_summary
+from workforce.models import Event, AttendanceRecord, UserActivity
+from workforce.utils import validate_church_proximity
+from workforce.broadcast import broadcast_attendance_summary
 
 @login_required
 def mark_attendance(request):
@@ -1512,7 +1592,8 @@ def mark_attendance(request):
     now = timezone.localtime()
     weekday = today.strftime("%A").lower()
 
-    events = Event.objects.filter(is_active=True)
+    # ✅ Use team-aware helper to get only events user can mark
+    events = get_available_events_for_user(request.user)
     available_events = []
 
     for e in events:
@@ -1549,21 +1630,33 @@ def mark_attendance(request):
     if request.method == "POST":
         is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
-        event_id = request.POST.get("event_id")
+        event_id = request.POST.get("event_id", "").strip()
         remarks = request.POST.get("remarks", "").strip()
         status = request.POST.get("status", "present")
         user_lat = request.POST.get("latitude")
         user_lon = request.POST.get("longitude")
         next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
 
-        # Find event or create custom one
+        # 🔹 Validate event_id before querying
+        if not event_id:
+            if is_ajax:
+                return JsonResponse({"success": False, "error": "Missing event ID"}, status=400)
+            messages.error(request, "Invalid or missing event ID.")
+            return HttpResponseRedirect(next_url)
+
         if event_id == "other":
-            custom_name = request.POST.get("custom_event")
+            custom_name = request.POST.get("custom_event") or "Custom Event"
             event, _ = Event.objects.get_or_create(
                 name=custom_name, event_type="custom", date=today
             )
         else:
-            event = Event.objects.get(id=event_id)
+            try:
+                event = Event.objects.get(id=int(event_id))
+            except (Event.DoesNotExist, ValueError):
+                if is_ajax:
+                    return JsonResponse({"success": False, "error": "Event not found"}, status=404)
+                messages.error(request, "Event not found.")
+                return HttpResponseRedirect(next_url)
 
         # ✅ Enforce physical presence validation for physical events
         mode = (getattr(event, "attendance_mode", "") or "").lower()
@@ -1589,12 +1682,31 @@ def mark_attendance(request):
             if now > timezone.make_aware(event_dt + timedelta(minutes=15)):
                 status = "late"
 
-        # Save or update record
-        AttendanceRecord.objects.update_or_create(
+        # ✅ Check if attendance already marked today
+        existing = AttendanceRecord.objects.filter(
+            user=request.user,
+            event=event,
+            date=today
+        ).first()
+
+        if existing:
+            if is_ajax:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"You have already marked attendance for {event.name} today."
+                }, status=400)
+            else:
+                messages.warning(request, f"You have already marked attendance for {event.name} today.")
+                return HttpResponseRedirect(next_url)
+
+        # Save record
+        AttendanceRecord.objects.create(
             user=request.user,
             event=event,
             date=today,
-            defaults={"status": status, "remarks": remarks},
+            status=status,
+            remarks=remarks,
+            team=event.team,
         )
 
         # 🔔 Notify live dashboard
@@ -1614,7 +1726,7 @@ def mark_attendance(request):
         "can_mark_now": can_mark_now,
         "show_weekly_summary": today.weekday() == 5 and now.hour >= 20,
     }
-    return render(request, "accounts/mark_attendance.html", context)
+    return render(request, "workforce/mark_attendance.html", context)
 
 
 
@@ -1622,22 +1734,20 @@ from datetime import timedelta
 from django.utils import timezone
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
-from accounts.models import Event, AttendanceRecord
+from workforce.models import Event, AttendanceRecord
 from django.db.models import Q
 
 @login_required
 def recent_event(request):
     """Return the most recent event (within 45 mins) if active and not yet marked by user."""
     now = timezone.localtime()
-    window_start = now - timedelta(minutes=45)
-    window_end = now + timedelta(minutes=5)
     weekday = now.strftime("%A").lower()
 
-    # Include today's dated events OR weekly recurring events for today
-    events_today = Event.objects.filter(
-        Q(date=now.date()) | Q(day_of_week=weekday),
-        is_active=True
-    )
+    # ✅ Only include events the user can attend (general + team events)
+    events_today = [
+        e for e in get_available_events_for_user(request.user)
+        if e.date == now.date() or (e.is_recurring_weekly and e.day_of_week.lower() == weekday)
+    ]
 
     recent_event = None
     for event in events_today:
@@ -1657,9 +1767,13 @@ def recent_event(request):
             # Skip undated + timeless events (like follow-ups)
             continue
 
-        print(f"Now={now}, Event={event_dt}, Match={window_start <= event_dt <= window_end}")
+        # Only within 15 minutes *before* start
+        window_start = event_dt - timedelta(minutes=15)
+        window_end = event_dt  # exactly at start time
 
-        if window_start <= event_dt <= window_end:
+        print(f"Now={now}, Event={event_dt}, Match={window_start <= now <= window_end}")
+
+        if window_start <= now <= window_end:
             recent_event = event
             break
 
@@ -1690,98 +1804,6 @@ def recent_event(request):
 
 
 
-from datetime import timedelta, date
-from django.utils import timezone
-from accounts.models import Event, PersonalReminder
-
-from datetime import date, datetime, timedelta, time
-from django.utils import timezone
-
-from datetime import date, timedelta
-from django.utils import timezone
-
-def get_calendar_items(user):
-    today = timezone.localdate()
-    start_of_year = date(today.year, 1, 1)
-    end_of_year = date(today.year, 12, 31)
-
-    events = Event.objects.filter(is_active=True)
-    reminders = PersonalReminder.objects.filter(user=user, date__gte=today)
-
-    calendar_items = []
-
-    weekday_map = {
-        'sunday': 6,
-        'monday': 0,
-        'tuesday': 1,
-        'wednesday': 2,
-        'thursday': 3,
-        'friday': 4,
-        'saturday': 5,
-    }
-
-    color_map = {
-        "service": "#3b82f6",
-        "meeting": "#10b981",
-        "training": "#8b5cf6",
-        "followup": "#e11d48",
-        "reminder": "#f59e0b",
-        "other": "#9ca3af",
-    }
-
-    def build_datetime(d, t):
-        if not t:
-            return d.isoformat()
-        return datetime.combine(d, t).isoformat()
-
-    for e in events:
-        event_type = (e.event_type or "other").lower()
-        color = color_map.get(event_type, "#4dabf7")
-
-        base_event = {
-            "title": e.name,
-            "type": e.event_type,
-            "mode": getattr(e, "mode", ""),
-            "color": color,
-            "description": getattr(e, "description", ""),
-            "time": e.time.strftime("%H:%M") if e.time else None,
-            "duration_days": getattr(e, "duration_days", 1),
-        }
-
-        if e.date and e.duration_days > 1:
-            start = build_datetime(e.date, e.time)
-            end = build_datetime(e.date + timedelta(days=e.duration_days - 1), e.time)
-            calendar_items.append({**base_event, "start": start, "end": end})
-
-        elif e.date:
-            calendar_items.append({**base_event, "start": build_datetime(e.date, e.time)})
-
-        elif e.is_recurring_weekly and e.day_of_week:
-            current = start_of_year
-            weekday = weekday_map.get(e.day_of_week.lower())
-            while current <= end_of_year:
-                if current.weekday() == weekday:
-                    calendar_items.append({
-                        **base_event,
-                        "start": build_datetime(current, e.time),
-                    })
-                current += timedelta(days=1)
-
-    # Reminders
-    for r in reminders:
-        calendar_items.append({
-            "title": r.title,
-            "start": build_datetime(r.date, getattr(r, "time", None)),
-            "type": "reminder",
-            "mode": "personal",
-            "color": color_map["reminder"],
-            "description": getattr(r, "note", ""),
-        })
-
-    return calendar_items
-
-
-
 @login_required
 def add_personal_reminder(request):
     if request.method == "POST":
@@ -1800,7 +1822,7 @@ def add_personal_reminder(request):
         messages.success(request, "Reminder added!")
         return redirect("dashboard")
 
-    return render(request, "accounts/add_reminder.html")
+    return render(request, "workforce/add_reminder.html")
 
 
 from datetime import date, datetime, timedelta, time
@@ -1812,18 +1834,28 @@ from datetime import date, timedelta
 from django.http import JsonResponse
 
 def api_events(request):
-    """Return JSON for FullCalendar with proper mode, color, and 24hr time."""
-    events = Event.objects.filter(is_active=True)
-    data = []
+    """
+    Unified API endpoint:
+      - FullCalendar (with start/end params)
+      - Team Modal (with team_id)
+    """
+    user = request.user
+    team_id = request.GET.get("team_id")
+    start = request.GET.get("start")
+    end = request.GET.get("end")
 
+    events = get_available_events_for_user(user)
+    today = timezone.localdate()
+
+    # 🟦 CASE 1 — Modal events by team_id
+    if team_id is not None:
+        data = expand_team_events(user, team_id)
+        return JsonResponse({"events": data})
+
+    # 🟩 CASE 2 — FullCalendar events (default path)
     weekday_map = {
-        'monday': 0,
-        'tuesday': 1,
-        'wednesday': 2,
-        'thursday': 3,
-        'friday': 4,
-        'saturday': 5,
-        'sunday': 6,
+        "monday": 0, "tuesday": 1, "wednesday": 2,
+        "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
     }
 
     color_map = {
@@ -1839,6 +1871,13 @@ def api_events(request):
     start_of_year = date(today.year, 1, 1)
     end_of_year = date(today.year, 12, 31)
 
+    data = []
+
+    def build_datetime(d, t):
+        if not t:
+            return d.isoformat()
+        return datetime.combine(d, t).isoformat()
+
     for e in events:
         event_type = (e.event_type or "other").lower()
         color = color_map.get(event_type, "#4dabf7")
@@ -1848,27 +1887,28 @@ def api_events(request):
             "color": color,
             "extendedProps": {
                 "type": e.event_type,
-                "mode": getattr(e, "mode", ""),
+                "mode": getattr(e, "attendance_mode", ""),
                 "location": getattr(e, "location", ""),
                 "description": getattr(e, "description", ""),
                 "time": e.time.strftime("%H:%M") if e.time else None,
+                "team": getattr(e.team, "name", None),
+                "team_color": getattr(e.team, "color_class", "bg-gray-800")
+                if getattr(e, "team", None)
+                else None,
             },
         }
 
-        # Determine start with proper datetime
-        def build_datetime(d, t):
-            if not t:
-                return d.isoformat()
-            dt = datetime.combine(d, t)
-            return dt.isoformat()
-
+        # Handle fixed-date events
         if e.date:
             start_date = e.date
-            end_date = e.end_date or (start_date + timedelta(days=getattr(e, "duration_days", 1) - 1))
+            end_date = e.end_date or (
+                start_date + timedelta(days=getattr(e, "duration_days", 1) - 1)
+            )
             base_event["start"] = build_datetime(start_date, e.time)
             base_event["end"] = build_datetime(end_date, e.time)
             data.append(base_event)
 
+        # Handle recurring events
         elif e.is_recurring_weekly and e.day_of_week:
             weekday = weekday_map.get(e.day_of_week.lower())
             if weekday is not None:
@@ -1890,7 +1930,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 import json
-from accounts.models import UserActivity
+from workforce.models import UserActivity
 
 @csrf_exempt
 @login_required
@@ -1920,14 +1960,14 @@ def log_user_activity(request):
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from accounts.models import Event
+from workforce.models import Event
 
 @login_required
 def get_active_events(request):
     """
     Returns active events — both one-time (with date) and recurring (without date).
     """
-    events = Event.objects.filter(is_active=True)
+    events = get_available_events_for_user(request.user)
     data = []
 
     for e in events:

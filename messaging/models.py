@@ -14,7 +14,7 @@ class GuestMessage(models.Model):
   sender = models.ForeignKey(
       settings.AUTH_USER_MODEL,
       on_delete=models.CASCADE,
-      related_name='sent_messages'
+      related_name='sent_guest_messages'
   )
   recipients = models.ManyToManyField(
       GuestEntry,

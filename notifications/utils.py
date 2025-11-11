@@ -3,18 +3,21 @@ from notifications.models import Notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from guests.models import GuestEntry
-from accounts.utils import user_in_groups
 from django.utils import timezone
 from pywebpush import webpush, WebPushException
-import json
+import json, re
 from django.conf import settings
+from accounts.utils import (
+    is_project_admin,
+    is_magnet_admin,
+    is_team_admin,
+    is_project_wide_admin,
+)
+from accounts.models import TeamMembership
 
 
 
 User = get_user_model()
-
-# Define staff groups globally
-STAFF_GROUPS = ["Pastor", "Team Lead", "Admin"]
 
 
 def guest_full_name(guest):
@@ -117,23 +120,50 @@ def notify_users(users, title, description, link="#", is_urgent=False, is_succes
                     print(f"Web Push failed for {user}: {repr(e)}")
 
 
-
-
 def get_user_role(user):
-    """Return the role of a user as string for notification purposes."""
-    if not user:
+    """
+    Returns a descriptive role string for notifications and dashboards.
+    Prioritizes highest-level roles first:
+      - Superuser
+      - Project-level Admins (Pastor, Admin)
+      - Magnet Admins (Minister-in-Charge, Team Admin - Magnet)
+      - Team Admins (Minister-in-Charge, Team Admin, Head of Unit, Asst. Head of Unit)
+      - Regular Team Members
+    """
+
+    if not user or not user.is_authenticated:
         return "Unknown"
+
+    # 1️⃣ Superuser always top-level
     if user.is_superuser:
         return "Superuser"
-    elif user_in_groups(user, STAFF_GROUPS):
-        # Return the first matching group as role
-        for group in STAFF_GROUPS:
-            if user_in_groups(user, group):
-                return group
-    elif user_in_groups(user, "Message Manager"):
-        return "Message Manager"
-    elif user_in_groups(user, "Registrant"):
-        return "Registrant"
-    else:
-        return "Team Member"
+
+    # 2️⃣ Project-level admins (Pastor, Admin)
+    if is_project_admin(user):
+        return "Admin"
+
+    # 3️⃣ Magnet-specific admins (oversees guest operations)
+    if is_magnet_admin(user, role="Minister-in-Charge,Team Admin"):
+        return "Magnet Admin"
+
+    # 4️⃣ Team-level admins across any team
+    if is_team_admin(user):
+        # Determine which teams and roles
+        memberships = TeamMembership.objects.filter(user=user)
+        admin_roles = []
+
+        for m in memberships:
+            # Default pattern if role not restricted
+            pattern = (
+                r"(minister[- ]?in[- ]?charge|team[ -]?admin|head[- ]?of[- ]?unit|asst\.?[- ]?head[- ]?of[- ]?unit)"
+            )
+            if re.search(pattern, (m.team_role or ""), re.IGNORECASE):
+                admin_roles.append(m.team.name if m.team else "")
+
+        team_list = ", ".join(sorted(set(admin_roles))) if admin_roles else ""
+        return f"Team Admin ({team_list})" if team_list else "Team Admin"
+
+    # 5️⃣ Default fallback
+    return "GForce Member"
+
 

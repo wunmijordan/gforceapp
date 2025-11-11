@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -28,7 +29,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'gatewaymagnetapp.urls'
+ROOT_URLCONF = 'gforceapp.urls'
 
 TEMPLATES = [
     {
@@ -46,7 +47,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'gatewaymagnetapp.wsgi.application'
+WSGI_APPLICATION = 'gforceapp.wsgi.application'
 
 DATABASES = {
     'default': {
@@ -74,4 +75,4 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'wunmijordan@gmail.com'
 EMAIL_HOST_PASSWORD = 'ikqu mikm pfbj ockv'
-DEFAULT_FROM_EMAIL = 'Gateway Nation Magnet App <wunmijordan@gmail.com>'
+DEFAULT_FROM_EMAIL = 'Gateway Nation Workforce App <wunmijordan@gmail.com>'

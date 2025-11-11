@@ -1,1 +1,1 @@
-web: gunicorn gatewaymagnetapp.wsgi:application --bind 0.0.0.0:$PORT
+web: gunicorn gforceapp.wsgi:application --bind 0.0.0.0:$PORT

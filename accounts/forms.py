@@ -3,8 +3,15 @@ from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
-from .models import CustomUser
+from .models import CustomUser, TeamMembership
+from workforce.models import Team
 
+
+PROJECT_LEVEL_GROUPS = ['Superuser', 'Pastor', 'Minister', 'Admin', 'Member']
+
+class GroupedTeamChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        return obj.name
 
 
 class CustomUserCreationForm(forms.ModelForm):
@@ -23,10 +30,18 @@ class CustomUserCreationForm(forms.ModelForm):
         widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Confirm Password'}),
     )
     group = forms.ModelChoiceField(
-        queryset=Group.objects.all(),
+        queryset=Group.objects.filter(name__in=PROJECT_LEVEL_GROUPS).order_by('name'),
         required=True,
-        widget=forms.Select(attrs={'class': 'form-select'}),
-        label="Group"
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_group'}),
+        label="Project Role",
+        help_text="Select user’s project-level role."
+    )
+    teams = GroupedTeamChoiceField(
+        queryset=Team.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select team-multiselect'}),
+        label="Team Memberships",
+        help_text="Assign this user to team(s) and specify team-level role.",
     )
     is_staff = forms.BooleanField(
         required=False,
@@ -46,7 +61,7 @@ class CustomUserCreationForm(forms.ModelForm):
         fields = [
             'image', 'title', 'full_name', 'email', 'username',
             'password', 'confirm_password', 'phone_number', 'date_of_birth',
-            'address', 'marital_status', 'department', 'group', 'is_active', 'is_staff', 'is_superuser'
+            'address', 'marital_status', 'department', 'group', 'teams', 'is_active', 'is_staff', 'is_superuser'
         ]
 
         widgets = {
@@ -89,12 +104,38 @@ class CustomUserCreationForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
+        import re
         user = super().save(commit=False)
         user.password = make_password(self.cleaned_data["password"])
+
         if commit:
             user.save()
-            user.groups.set([self.cleaned_data.get("group")])
+
+            # ✅ Assign project-level role (Group)
+            group = self.cleaned_data.get("group")
+            if group:
+                user.groups.set([group])
+            else:
+                user.groups.clear()
+
+            # ✅ Parse team-role pairs from hidden input (cleaner separate format)
+            team_data_raw = self.data.get("teamsHiddenInput", "")
+            if team_data_raw:
+                TeamMembership.objects.filter(user=user).delete()  # clear old links
+
+                pairs = [pair.strip() for pair in team_data_raw.split(",") if ":" in pair]
+                for pair in pairs:
+                    team_id, role = map(str.strip, pair.split(":", 1))
+                    if team_id and role:
+                        try:
+                            team = Team.objects.get(id=int(team_id))
+                            TeamMembership.objects.create(user=user, team=team, team_role=role)
+                        except (Team.DoesNotExist, ValueError):
+                            continue
+
         return user
+
+            
 
     def __init__(self, *args, **kwargs):
         self.current_user = kwargs.pop('current_user', None)
@@ -105,28 +146,29 @@ class CustomUserCreationForm(forms.ModelForm):
             for f in ['is_staff', 'is_superuser']:
                 self.fields.pop(f, None)
 
-        # Default group to "Team Member" (only for creation, i.e. no instance pk)
-        if not self.instance.pk:  
-            try:
-                default_group = Group.objects.get(name="Team Member")
-                self.fields['group'].initial = default_group.id
-            except Group.DoesNotExist:
-                pass  # safe fallback if group doesn't exist
+        # --- Ensure core project roles exist ---
+        project_roles = ["Pastor", "Minister", "Admin", "GForce Member"]
+        for role_name in project_roles:
+            Group.objects.get_or_create(name=role_name)
 
-        # Fields that should allow blank without showing '---------' or 'None'
+        # Only show project-level roles (exclude Superuser + legacy)
+        self.fields['group'].queryset = Group.objects.filter(
+            name__in=project_roles
+        ).order_by('name')
+
+        
+
+        # --- Cosmetic cleanup for dropdown labels ---
         select_fields = ['title', 'marital_status', 'department']
-
         for field_name in select_fields:
             if field_name in self.fields:
-                # Replace default empty label with a real blank choice
                 choices = list(self.fields[field_name].choices)
                 if choices and choices[0][0] == '':
-                    # Replace first choice (usually '---------') with empty
                     choices[0] = ("", "")
                 else:
-                    # If no blank exists, prepend one
                     choices = [("", "")] + choices
                 self.fields[field_name].choices = choices
+
 
 
 class CustomUserChangeForm(forms.ModelForm):
@@ -147,10 +189,18 @@ class CustomUserChangeForm(forms.ModelForm):
         required=False
     )
     group = forms.ModelChoiceField(
-        queryset=Group.objects.all(),
-        required=False,
+        queryset=Group.objects.all().order_by('name'),
+        required=True,
         widget=forms.Select(attrs={'class': 'form-select'}),
-        label="Group"
+        label="Project Role",
+        help_text="Select user’s project-level role."
+    )
+    teams = GroupedTeamChoiceField(
+        queryset=Team.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={'class': 'form-select team-multiselect'}),
+        label="Team Memberships",
+        help_text="Assign this user to team(s) and specify team-level role.",
     )
     # Add admin fields as checkboxes
     is_staff = forms.BooleanField(
@@ -174,7 +224,7 @@ class CustomUserChangeForm(forms.ModelForm):
         fields = [
             'image', 'title', 'full_name', 'email', 'username', 'password', 'confirm_password',
             'phone_number', 'date_of_birth', 'address', 'marital_status', 'department',
-            'group', 'is_staff', 'is_active', 'is_superuser'
+            'group', 'teams', 'is_staff', 'is_active', 'is_superuser'
         ]
 
         widgets = {
@@ -208,51 +258,51 @@ class CustomUserChangeForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.current_user = kwargs.pop('current_user', None)
-        self.edit_mode = kwargs.pop('edit_mode', False)  # <- add this
+        self.edit_mode = kwargs.pop('edit_mode', False)
         super().__init__(*args, **kwargs)
 
-        # Only apply frontend restrictions if current_user is explicitly passed
-        if self.current_user:
-            # Disable or hide is_staff for non-superuser admin-group users
-            if not self.current_user.is_superuser:
-                self.fields['is_staff'].disabled = True  # readonly
+        # --- Hide sensitive fields for non-superusers ---
+        if self.current_user and not self.current_user.is_superuser:
+            for f in ['is_staff', 'is_superuser']:
+                self.fields.pop(f, None)
 
-        # Pre-select user group
-        if self.instance.pk:
-            groups = self.instance.groups.all()
-            self.fields['group'].initial = groups.first().id if groups.exists() else None
+        # --- Ensure project-level roles exist ---
+        project_roles = ["Pastor", "Minister", "Admin", "GForce Member"]
+        for role_name in project_roles:
+            Group.objects.get_or_create(name=role_name)
 
-            # Pre-select user_permissions
-            #self.fields['user_permissions'].initial = self.instance.user_permissions.all()
+        # --- Limit group queryset to only those roles (exclude Superuser + legacy) ---
+        self.fields['group'].queryset = Group.objects.filter(
+            name__in=project_roles
+        ).order_by('name')
 
-        # FRONTEND restrictions
-        if self.edit_mode and self.current_user:
-            if not self.current_user.is_superuser:
-                # Non-superuser staff: hide / disable sensitive fields
-                for f in ['is_staff', 'is_superuser']:
-                    if f in self.fields:
-                        self.fields.pop(f)  # completely hide these fields
-
-        # Preselect current group
+        # --- Preselect current user's group ---
         if self.instance.pk:
             groups = self.instance.groups.all()
             if groups.exists():
                 self.fields['group'].initial = groups.first().id
 
-        # Fields that should allow blank without showing '---------' or 'None'
-        select_fields = ['title', 'marital_status', 'department']
+        # --- FRONTEND restrictions ---
+        if self.edit_mode and self.current_user:
+            if not self.current_user.is_superuser:
+                # Non-superuser staff: hide / disable sensitive fields
+                for f in ['is_staff', 'is_superuser']:
+                    if f in self.fields:
+                        self.fields.pop(f)
 
+        
+
+        # --- Make dropdowns look consistent ---
+        select_fields = ['title', 'marital_status', 'department']
         for field_name in select_fields:
             if field_name in self.fields:
-                # Replace default empty label with a real blank choice
                 choices = list(self.fields[field_name].choices)
                 if choices and choices[0][0] == '':
-                    # Replace first choice (usually '---------') with empty
                     choices[0] = ("", "")
                 else:
-                    # If no blank exists, prepend one
                     choices = [("", "")] + choices
                 self.fields[field_name].choices = choices
+
 
     def clean(self):
         cleaned_data = super().clean()
@@ -265,22 +315,39 @@ class CustomUserChangeForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
+        import re
         user = super().save(commit=False)
         password = self.cleaned_data.get("password")
         if password:
             user.password = make_password(password)
+        else:
+            user.password = CustomUser.objects.get(pk=self.instance.pk).password
 
         if commit:
             user.save()
+
+            # ✅ Update project-level role
             group = self.cleaned_data.get("group")
             if group:
                 user.groups.set([group])
             else:
                 user.groups.clear()
 
-            # Assign permissions (only if field exists, i.e., superuser)
-            #if 'user_permissions' in self.cleaned_data:
-            #    user.user_permissions.set(self.cleaned_data.get("user_permissions"))
+            # ✅ Update team-role pairs
+            team_data_raw = self.data.get("teamsHiddenInput", "")
+            TeamMembership.objects.filter(user=user).delete()
+
+            if team_data_raw:
+                pairs = [pair.strip() for pair in team_data_raw.split(",") if ":" in pair]
+                for pair in pairs:
+                    team_id, role = map(str.strip, pair.split(":", 1))
+                    if team_id and role:
+                        try:
+                            team = Team.objects.get(id=int(team_id))
+                            TeamMembership.objects.create(user=user, team=team, team_role=role)
+                        except (Team.DoesNotExist, ValueError):
+                            continue
+
         return user
 
 
@@ -298,36 +365,3 @@ class GroupForm(forms.ModelForm):
         }
 
 
-from django import forms
-from .models import Event
-
-class EventForm(forms.ModelForm):
-    class Meta:
-        model = Event
-        fields = [
-            "name",
-            "event_type",
-            "attendance_mode",
-            "day_of_week",
-            "date",
-            "end_date",
-            "time",
-            "duration_days",
-            "is_recurring_weekly",
-            "is_active",
-        ]
-        widgets = {
-            "day_of_week": forms.Select(attrs={"class": "form-select"}),
-            "attendance_mode": forms.Select(attrs={"class": "form-select"}),
-            "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "time": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
-            "name": forms.TextInput(attrs={"class": "form-control"}),
-            "event_type": forms.Select(attrs={"class": "form-select"}),
-            "duration_days": forms.NumberInput(attrs={"class": "form-control"}),
-            "is_recurring_weekly": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-        }
-        help_texts = {
-            "duration_days": "Number of days this event lasts",
-        }

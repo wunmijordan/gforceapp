@@ -9,7 +9,7 @@ from django.utils.timezone import localtime, now
 import pytz, requests, re, calendar, json, mimetypes, os
 from django.contrib.auth import get_user_model
 from guests.models import GuestEntry
-from .models import CustomUser, ChatMessage, Event, AttendanceRecord, PersonalReminder
+from .models import CustomUser, TeamMembership
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.paginator import Paginator
 from django.db.models import Q, Count
@@ -18,8 +18,16 @@ from django.db.models.functions import ExtractMonth
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib.auth.models import Group
 from .forms import CustomUserCreationForm, CustomUserChangeForm, GroupForm
-from .utils import user_in_groups
-from .consumers import get_user_color
+from .utils import (
+    user_in_groups,
+    is_project_wide_admin,
+    is_magnet_admin,
+    is_team_admin,
+    is_project_admin,
+    is_project_level_role,
+    user_in_team,
+)
+from workforce.consumers import get_user_color
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import JsonResponse
 from django.utils.dateparse import parse_datetime
@@ -27,10 +35,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
-from .utils import serialize_message, build_mention_helpers
 from django.core.files.storage import default_storage
 import urllib.parse
 from django.conf import settings
+from workforce.utils import get_calendar_items, get_available_events_for_user, expand_team_events, get_visible_attendance_records, get_visible_clock_records
+from workforce.models import AttendanceRecord, Team, ClockRecord
+from collections import defaultdict
+from django.utils import timezone
 
 
 
@@ -66,7 +77,7 @@ class CustomLoginView(LoginView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse_lazy('accounts:chat_room')
+        return reverse_lazy('workforce:chat_room')
 
 
 def post_login_redirect(request):
@@ -108,41 +119,10 @@ def post_login_redirect(request):
 User = get_user_model()
 
 
-@login_required
-@user_passes_test(lambda u: user_in_groups(u, "Pastor,Team Lead,Admin"))
-def attendance_summary(request):
-    """Provide attendance summary for admin dashboard or AJAX refresh."""
-    records = AttendanceRecord.objects.select_related("event", "user").order_by("-date")
-
-    # Force JSON if explicitly requested or request is fetch()
-    wants_json = (
-        request.headers.get("x-requested-with") == "XMLHttpRequest"
-        or request.content_type == "application/json"
-        or request.GET.get("format") == "json"
-    )
-
-    if wants_json:
-        data = [
-            {
-                "date": r.date.strftime("%Y-%m-%d"),
-                "event": r.event.name if r.event else "—",
-                "user": f"{(r.user.title or '')} {r.user.get_full_name()}".strip(),
-                "status": r.status,
-                "remarks": r.remarks or "—",
-            }
-            for r in records
-        ]
-        return JsonResponse({"records": data})
-
-    # Fallback: render dashboard normally
-    context = {"records": records}
-    return render(request, "accounts/admin_dashboard.html", context)
-
-
 
 
 @login_required
-@user_passes_test(lambda u: user_in_groups(u, "Pastor,Team Lead,Admin,Registrant,Message Manager"))
+@user_passes_test(lambda u: is_project_wide_admin(u))
 def admin_dashboard(request):
     """
     Admin/Superuser dashboard with all user stats and charts.
@@ -151,6 +131,7 @@ def admin_dashboard(request):
     """
     user = request.user
     current_year = datetime.now().year
+    last_30_days = now().date() - timedelta(days=30)
 
     # Role-based queryset
     if user.is_superuser:
@@ -158,14 +139,19 @@ def admin_dashboard(request):
         queryset = GuestEntry.objects.all()
         users = User.objects.all().order_by('full_name')
 
-    elif user_in_groups(request.user, "Pastor,Team Lead,Admin"):
+    elif is_project_admin(request.user):
         # Admin: all guests, but exclude superusers from user stats
         queryset = GuestEntry.objects.all()
         users = User.objects.filter(is_superuser=False).order_by('full_name')
 
-    elif user_in_groups(request.user, "Message Manager,Registrant"):
-        # Message Manager & Registrant: only guests, no users
+    elif is_magnet_admin(request.user):
+        # Admin: all guests, but exclude superusers from user stats
         queryset = GuestEntry.objects.all()
+        users = User.objects.filter(is_superuser=False).order_by('full_name')
+
+    elif is_team_admin(request.user):
+        # Message Manager & Registrant: only guests, no users
+        queryset = GuestEntry.objects.none()
         users = None
 
     # Available years
@@ -322,10 +308,106 @@ def admin_dashboard(request):
         diff = ((user_planted_current_month - user_planted_last_month) / user_planted_last_month) * 100
         planted_growth_change = round(diff, 1)
 
-    other_users = User.objects.exclude(id=request.user.id)
-    calendar_items = get_calendar_items(request.user)
-    records = AttendanceRecord.objects.select_related("event", "user").order_by("-date")
+    # Get all teams the user belongs to
+    user_teams = Team.objects.filter(memberships__user=request.user).distinct()
 
+    # Fetch other users who belong to any of those same teams
+    other_users = CustomUser.objects.filter(
+        team_memberships__team__in=user_teams
+    ).exclude(id=request.user.id).distinct()
+
+    # Exclude project-level admins
+    other_users = [u for u in other_users if not is_project_admin(u)]
+
+    # Assign color for each user card
+    for user in other_users:
+        user.color = get_user_color(user.id)
+
+    # Precompute: list of (team, members) pairs
+    team_member_pairs = []
+    for team in user_teams:
+        members = [u for u in other_users if u.team_memberships.filter(team=team).exists()]
+        team_member_pairs.append((team, members))  
+    
+
+        
+    calendar_items = get_calendar_items(request.user)
+    records = get_visible_attendance_records(request.user, since_date=last_30_days)
+    clock_records = get_visible_clock_records(request.user, since_date=last_30_days)
+
+    # Resolve selected_team from GET params (if provided) to avoid undefined variable errors.
+    selected_team = None
+    selected_team_id = request.GET.get('team')
+    if selected_team_id:
+        try:
+            selected_team = Team.objects.get(id=int(selected_team_id))
+        except (Team.DoesNotExist, ValueError, TypeError):
+            selected_team = None
+
+    today = timezone.localdate()
+
+    # Count totals
+    total_clock_in = clock_records.filter(clock_in__isnull=False).count()
+    total_clock_out = clock_records.filter(clock_out__isnull=False).count()
+
+    # Optional: today’s record
+    today_record = clock_records.filter(date=today).first()
+
+    # Merge ClockRecord info into each AttendanceRecord
+    clock_map = {
+        (c.user_id, c.event_id, c.date): c
+        for c in clock_records
+    }
+
+    # Enrich attendance records with clock in/out times (localized, 24-hour format)
+    for r in records:
+        clock = clock_map.get((r.user_id, r.event_id, r.date))
+        if clock:
+            r.clock_in_time = (
+                timezone.localtime(clock.clock_in).strftime("%H:%M")
+                if clock.clock_in else None
+            )
+            r.clock_out_time = (
+                timezone.localtime(clock.clock_out).strftime("%H:%M")
+                if clock.clock_out else None
+            )
+        else:
+            r.clock_in_time = None
+            r.clock_out_time = None
+
+    # === Upcoming Events (Team + GForce) ===
+    events = []
+
+    # Get all accessible events (including all teams)
+    base_events = get_available_events_for_user(request.user)
+
+    for team in [None] + list(Team.objects.all()):
+        team_id = getattr(team, "id", None)
+        expanded = expand_team_events(request.user, team_id)
+        events.extend(expanded)
+
+    upcoming_events = [e for e in events if e["date"] >= today]
+    upcoming_events.sort(key=lambda e: e["date"])
+
+    # === Next available events for the week ===
+    start_of_week = today - timedelta(days=today.weekday())  # Monday start
+    start_of_sunday = start_of_week - timedelta(days=1)      # Adjust to Sunday start
+    end_of_week = start_of_sunday + timedelta(days=7)        # Sunday → Sunday window
+
+    # Filter the user's events for this week (including GForce)
+    weekly_events = [
+        e for e in upcoming_events
+        if start_of_sunday <= e["date"] <= end_of_week
+        and (e.get("team_id") in [t.id for t in user_teams] or e.get("team_id") is None)
+    ]
+
+    weekly_events.sort(key=lambda e: (e["date"], e.get("time", "")))
+    # ✅ Add full ISO datetime for countdowns
+    for e in weekly_events:
+        e["datetime_iso"] = (
+            f"{e['date']}T{e['time']}" if e.get("time") else f"{e['date']}T00:00:00"
+        )
+    next_events = weekly_events  # limit display to next 5 just in case
 
     context = {
         'show_filters': False,
@@ -364,8 +446,26 @@ def admin_dashboard(request):
         'users': users,
         'guests': queryset,
         'other_users': other_users,
+        'user_teams': user_teams,
+        'team_member_pairs': team_member_pairs,
         'calendar_items': calendar_items,
         'records': records,
+        'clock_records': clock_records,          # if you want to render detailed history later
+        'total_clock_in': total_clock_in,
+        'total_clock_out': total_clock_out,
+        'today_clock_in': getattr(today_record, 'clock_in', None),
+        'today_clock_out': getattr(today_record, 'clock_out', None),
+        'available_events': upcoming_events,
+        'next_events_for_week': next_events,
+        'context_user_permissions': json.dumps({
+            'is_project_admin': is_project_admin(request.user),
+            'is_project_wide_admin': is_project_wide_admin(request.user),
+            'is_team_admin': is_team_admin(request.user, selected_team),
+            'is_magnet_admin': is_magnet_admin(request.user),
+            'is_project_level_role': is_project_level_role(request.user),
+            'user_in_groups': user_in_groups(request.user, "Pastor,Admin,Minister,GForce Member"),
+            'user_in_team': user_in_team(request.user, selected_team)
+        }, cls=DjangoJSONEncoder),
         'page_title': "Admin Dashboard",
     }
     #return HttpResponseForbidden("Dashboard temporarily disabled.")
@@ -408,8 +508,25 @@ def user_list(request):
     # Determine accessible users
     if request.user.is_superuser:
         users = CustomUser.objects.all()
-    elif user_in_groups(request.user, "Pastor,Team Lead,Admin"):
+    # 2️⃣ Project admins (Pastor/Admin) see all users
+    elif is_project_admin(request.user):
         users = CustomUser.objects.filter(is_superuser=False)
+
+    # 3️⃣ Team admins (e.g. MIC, Head of Unit) see users from *their own team(s) only*
+    elif is_team_admin(request.user):
+        # Teams where the user is a MIC or Team Admin
+        admin_teams = Team.objects.filter(
+            memberships__user=request.user,
+            memberships__team_role__in=["Minister-in-Charge", "Team Admin"]
+        )
+
+        # All users in those teams
+        users_in_teams = CustomUser.objects.filter(
+            team_memberships__team__in=admin_teams
+        ).distinct()
+
+        # Exclude project-level admins
+        users = [u for u in users_in_teams if not is_project_admin(u)]
     else:
         messages.error(request, "You do not have permission to view users.")
         return redirect('accounts:admin_dashboard')
@@ -424,7 +541,7 @@ def user_list(request):
 
     # Pagination
     view_type = request.GET.get('view', 'cards')
-    per_page = 50 if view_type == 'list' else 12
+    per_page = 50 if view_type == 'list' else 45
     paginator = Paginator(users, per_page)  # <-- paginate filtered users
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
@@ -442,86 +559,60 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib import messages
-from .models import CustomUser
+from .models import CustomUser, TeamMembership
 from .forms import CustomUserCreationForm, CustomUserChangeForm
-
-@login_required
-def create_user(request):
-    """
-    Create new users. Admin group cannot create superusers.
-    """
-    # Only superusers or Admin group can access
-    if not (user_in_groups(request.user, "Pastor,Team Lead,Registrant,Admin")):
-        messages.error(request, "You do not have permission to create users.")
-        return redirect('accounts:user_list')
-
-    if request.method == "POST":
-        form = CustomUserCreationForm(
-            request.POST, 
-            request.FILES, 
-            current_user=request.user
-        )
-
-        # Admins cannot create superusers
-        if not request.user.is_superuser:
-            form.instance.is_superuser = False
-
-        if form.is_valid():
-            user = form.save()
-
-            messages.success(request, f"User {user.full_name} created successfully!")
-
-            # Button routing
-            if 'save_return' in request.POST:
-                return redirect('accounts:user_list')
-            elif 'save_add_another' in request.POST:
-                return redirect('accounts:create_user')
-        else:
-            messages.error(request, "Please correct the errors below.")
-    else:
-        form = CustomUserCreationForm(current_user=request.user)
-
-
-    return render(request, 'accounts/user_form.html', {
-        'form': form,
-        'edit_mode': False,
-        'page_title': 'Team',
-    })
-
+from workforce.models import Team
+from .utils import user_in_groups  # if you already have this helper
 
 
 @login_required
-def edit_user(request, user_id):
+def manage_user(request, user_id=None):
     """
-    Edit user profile. Admins cannot edit superusers.
+    Combined create/edit view for users.
+    Includes preloadedTeamRoles for frontend JS handling.
     """
-    user_obj = get_object_or_404(CustomUser, pk=user_id)
+    is_edit = user_id is not None
+    user_obj = get_object_or_404(CustomUser, pk=user_id) if is_edit else None
 
-    # Admins cannot edit superusers
-    if not request.user.is_superuser and user_obj.is_superuser:
+    # Permission checks
+    if not is_magnet_admin(request.user):
+        messages.error(request, "You do not have permission to manage users.")
+        return redirect("accounts:user_list")
+
+    if is_edit and not request.user.is_superuser and user_obj.is_superuser:
         messages.error(request, "You cannot edit a superuser.")
-        return redirect('accounts:user_list')
+        return redirect("accounts:user_list")
 
-    # Only superusers or Admin group can access
-    if not (user_in_groups(request.user, "Pastor,Team Lead,Registrant,Admin")):
-        messages.error(request, "You do not have permission to edit users.")
-        return redirect('accounts:user_list')
+    # Choose form type
+    FormClass = CustomUserChangeForm if is_edit else CustomUserCreationForm
+    form_kwargs = {
+        "data": request.POST or None,
+        "files": request.FILES or None,
+        "instance": user_obj,
+        "current_user": request.user,
+    }
 
-    form = CustomUserChangeForm(request.POST or None, request.FILES or None, instance=user_obj, current_user=request.user, edit_mode=True)
-    password_form = SetPasswordForm(user_obj)
+    # Only pass edit_mode to the change form
+    if is_edit and FormClass is CustomUserChangeForm:
+        form_kwargs["edit_mode"] = True
 
+    form = FormClass(**form_kwargs)
+
+    password_form = SetPasswordForm(user_obj) if is_edit else None
+
+    # ---- Handle POST actions ----
     if request.method == "POST":
-        # Delete User
-        if 'delete_user' in request.POST:
+        # Delete
+        if "delete_user" in request.POST and is_edit:
             if user_obj.is_superuser:
                 messages.error(request, "Cannot delete a superuser.")
             else:
                 user_obj.delete()
                 messages.success(request, f"User {user_obj.full_name} deleted successfully.")
-            return redirect('accounts:user_list')
+            return redirect("accounts:user_list")
 
-        # Deactivate/Reactivate User
-        elif 'deactivate_user' in request.POST:
+        # Deactivate / Reactivate
+        elif "deactivate_user" in request.POST and is_edit:
             if user_obj.is_superuser:
                 messages.error(request, "Cannot deactivate a superuser.")
             else:
@@ -529,41 +620,75 @@ def edit_user(request, user_id):
                 user_obj.save()
                 status = "activated" if user_obj.is_active else "deactivated"
                 messages.success(request, f"User {user_obj.full_name} {status} successfully.")
-            return redirect('accounts:user_list')
+            return redirect("accounts:user_list")
 
-        # Change Password
-        elif 'change_password' in request.POST:
+        # Change password
+        elif "change_password" in request.POST and is_edit:
             password_form = SetPasswordForm(user_obj, request.POST)
             if password_form.is_valid():
                 password_form.save()
                 messages.success(request, f"Password updated for {user_obj.full_name}.")
-                return redirect('accounts:user_list')
+                return redirect("accounts:user_list")
             else:
                 messages.error(request, "Please correct the password errors.")
 
-        # Edit user/profile
+        # Create or update user
         else:
+            # Superuser creation restriction
+            if not request.user.is_superuser:
+                form.instance.is_superuser = False
+
             if form.is_valid():
-                user_obj = form.save()
+                saved_user = form.save()
+                action = "updated" if is_edit else "created"
+                messages.success(request, f"User {saved_user.full_name} {action} successfully!")
 
-                messages.success(request, f"User {user_obj.full_name} updated successfully!")
-
-                # Button routing
-                if 'save_return' in request.POST:
-                    return redirect('accounts:user_list')
-                elif 'save_add_another' in request.POST:
-                    return redirect('accounts:create_user')
+                if "save_return" in request.POST:
+                    return redirect("accounts:user_list")
+                elif "save_add_another" in request.POST:
+                    return redirect("accounts:manage_user")
             else:
                 messages.error(request, "Please correct the errors below.")
 
+    # ---- Preload Team Roles for JS ----
+    teams = Team.objects.all()
+    team_roles = [
+        {
+            "id": team.id,
+            "name": team.name,
+            "color_class": team.color_class,
+            "color_hex": team.color_hex,
+        }
+        for team in Team.objects.all()
+    ]
+    memberships = (
+        list(
+            TeamMembership.objects.filter(user=user_obj).values(
+                "team_id", "team__name", "team_role"
+            )
+        )
+        if is_edit
+        else []
+    )
 
-    return render(request, 'accounts/user_form.html', {
-        'form': form,
-        'edit_mode': True,
-        'user_obj': user_obj,
-        'password_form': password_form,
-        'page_title': 'Team',
-    })
+    preloadedTeamRoles = {
+        "teams": team_roles,
+        "userMemberships": memberships,
+    }
+
+    return render(
+        request,
+        "accounts/user_form.html",
+        {
+            "form": form,
+            "edit_mode": is_edit,
+            "user_obj": user_obj,
+            "password_form": password_form,
+            "preloadedTeamRoles": preloadedTeamRoles,
+            "page_title": "Team",
+        },
+    )
+
 
 
 
@@ -592,7 +717,7 @@ def delete_group(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
     # Prevent deletion of important groups
-    if group.name in ["Team Member", "Admin", "Message Manager", "Registrant"]:
+    if group.name in ["Admin", "Pastor", "Minister", "GForce Member"]:
         messages.error(request, f"Cannot delete the '{group.name}' group.")
         return redirect("accounts:manage_groups")
 
@@ -609,761 +734,196 @@ def delete_group(request, group_id):
 
 
 
+# accounts/views.py
+from django.http import JsonResponse
+from workforce.models import Team
 
-@login_required
-def chat_room(request):
-    users = CustomUser.objects.all().prefetch_related('assigned_guests')
 
-    guest_id = request.GET.get("guest_id")
-    attached_guest = GuestEntry.objects.filter(id=guest_id).first() if guest_id else None
+def load_teams(request):
+    group_name = request.GET.get('group')
+    teams = Team.objects.filter(is_active=True).values('id', 'name')
+    return JsonResponse(list(teams), safe=False)
 
-    def get_effective_role(user):
-        if user.is_superuser:
-            return "Superuser"
-        if user_in_groups(user, "Admin"):
-            return "Admin"
-        if user_in_groups(user, "Pastor"):
-            return "Pastor"
-        if user_in_groups(user, "Team Lead"):
-            return "Team Lead"
-        return "Team Member"
 
-    # Prebuild mention helpers (map + regex)
-    mention_map, mention_regex = build_mention_helpers()
-
-    # Load latest 50 messages efficiently
-    last_messages = ChatMessage.objects.select_related(
-        'sender', 'guest_card', 'parent__sender'
-    ).order_by('-created_at')[:50]
-    last_messages_payload = [
-        serialize_message(m, mention_map, mention_regex) for m in reversed(last_messages)
+def load_roles(request):
+    group_name = request.GET.get('group')
+    all_roles = [
+        "Minister-in-Charge", "Head of Unit", "Asst. Head of Unit",
+        "Team Admin", "Subleader", "Member"
     ]
+    if group_name in ["Admin", "GForce Member"]:
+        all_roles.remove("Minister-in-Charge")
+    return JsonResponse(all_roles, safe=False)
 
-    user_guests = [
-        {
-            "id": u.id,
-            "name": u.full_name or u.username,
-            "role": get_effective_role(u),
-            "guests": [
-                {
-                    "id": g.id,
-                    "name": g.full_name,
-                    "custom_id": g.custom_id,
-                    "image": g.picture.url if g.picture else None,
-                    "title": g.title,
-                    "date_of_visit": g.date_of_visit.strftime("%Y-%m-%d") if g.date_of_visit else "",
-                    "assigned": True
-                } for g in u.assigned_guests.all()
-            ]
-        } for u in users
-    ]
 
-    # Unassigned guests
-    unassigned_guests = []
-    if get_effective_role(request.user) in ["Pastor", "Team Lead", "Admin", "Superuser"]:
-        unassigned_qs = GuestEntry.objects.filter(assigned_to__isnull=True)
-        unassigned_guests = [
-            {
-                "id": g.id,
-                "name": g.full_name,
-                "custom_id": g.custom_id,
-                "image": g.picture.url if g.picture else None,
-                "title": g.title,
-                "date_of_visit": g.date_of_visit.strftime("%Y-%m-%d") if g.date_of_visit else "",
-                "assigned": False
-            } for g in unassigned_qs
-        ]
-
-    context = {
-        "users": [
-            {
-                "id": u.id,
-                "full_name": u.full_name,
-                "username": u.username,
-                "title": u.title,
-                "initials": u.initials,
-                "phone_number": u.phone_number,
-                "image": u.image.url if u.image else None,
-                "last_message": u.sent_chats.first().message if u.sent_chats.exists() else "No messages yet",
-                "role": get_effective_role(u),
-                "color": get_user_color(u.id),
-                "guests": [
-                    {
-                        "id": g.id,
-                        "name": g.full_name,
-                        "custom_id": g.custom_id,
-                        "image": g.picture.url if g.picture else None,
-                        "title": g.title,
-                        "date_of_visit": g.date_of_visit.strftime("%Y-%m-%d") if g.date_of_visit else "",
-                        "assigned_user": {
-                            "id": g.assigned_to.id,
-                            "title": g.assigned_to.title,
-                            "full_name": g.assigned_to.full_name,
-                            "image": g.assigned_to.image.url if g.assigned_to.image else None,
-                        } if g.assigned_to else None
-                    } for g in u.assigned_guests.all()
-                ]
-            } for u in users
-        ],
-        "users_json": json.dumps([  # keep JSON version of users
-            {
-                "id": u.id,
-                "full_name": u.full_name,
-                "username": u.username,
-                "title": u.title,
-                "initials": u.initials,
-                "phone_number": u.phone_number,
-                "image": u.image.url if u.image else None,
-                "last_message": u.sent_chats.first().message if u.sent_chats.exists() else "No messages yet",
-                "role": get_effective_role(u),
-                "color": get_user_color(u.id),
-                "guests": [
-                    {
-                        "id": g.id,
-                        "name": g.full_name,
-                        "custom_id": g.custom_id,
-                        "image": g.picture.url if g.picture else None,
-                        "title": g.title,
-                        "date_of_visit": g.date_of_visit.strftime("%Y-%m-%d") if g.date_of_visit else "",
-                        "assigned_user": {
-                            "id": g.assigned_to.id,
-                            "title": g.assigned_to.title,
-                            "full_name": g.assigned_to.full_name,
-                            "image": g.assigned_to.image.url if g.assigned_to.image else None,
-                        } if g.assigned_to else None
-                    } for g in u.assigned_guests.all()
-                ]
-            } for u in users
-        ], cls=DjangoJSONEncoder),
-        "user_guests_json": json.dumps(user_guests, cls=DjangoJSONEncoder),
-        "unassigned_guests_json": json.dumps(unassigned_guests, cls=DjangoJSONEncoder),
-        "last_messages_json": json.dumps(last_messages_payload, cls=DjangoJSONEncoder),
-        "current_user_id": request.user.id,
-        "current_user_role": get_effective_role(request.user),
-        "attached_guest": {
-            "id": attached_guest.id,
-            "name": attached_guest.full_name,
-            "custom_id": attached_guest.custom_id,
-            "image": attached_guest.picture.url if attached_guest.picture else None,
-            "title": attached_guest.title,
-            "initials": attached_guest.initials,
-            "date_of_visit": attached_guest.date_of_visit.strftime("%Y-%m-%d") if attached_guest.date_of_visit else "",
-            "assigned": bool(attached_guest.assigned_to)
-        } if attached_guest else None,
-        "page_title": "ChatRoom",
-    }
-    return render(request, "accounts/chat_room.html", context)
 
 
 @login_required
-def load_more_messages(request):
-    """AJAX endpoint to fetch older messages before a given timestamp."""
-    before = request.GET.get("before")  # ISO timestamp string
-    limit = int(request.GET.get("limit", 50))
+def attendance_summary(request):
+    user = request.user
+    target_user = user
+    user_id = request.GET.get("user_id")
 
-    qs = ChatMessage.objects.select_related("sender", "guest_card", "parent__sender")
-
-    if before:
-        before_dt = parse_datetime(before)
-        if before_dt:
-            qs = qs.filter(created_at__lt=before_dt)
-
-    # Prebuild mention helpers
-    mention_map, mention_regex = build_mention_helpers()
-
-    # 🔹 Fetch newest first, then reverse in Python to oldest → newest
-    messages = list(qs.order_by("-created_at")[:limit])
-    messages.reverse()  # oldest → newest
-
-    payload = [serialize_message(m, mention_map, mention_regex) for m in messages]
-
-    return JsonResponse({"messages": payload})
-
-
-
-@csrf_exempt
-def upload_file(request):
-    """Upload a file and return metadata for frontend."""
-    if request.method != "POST" or "file" not in request.FILES:
-        return JsonResponse({"error": "Invalid request"}, status=400)
-
-    try:
-        f = request.FILES["file"]
-
-        if not settings.DEBUG:
-            # 🚀 Upload to Cloudinary in production
-            import cloudinary.uploader
-            result = cloudinary.uploader.upload(
-                f,
-                folder="chat/files",
-                resource_type="auto"  # handles any file type
-            )
-            file_url = result["secure_url"]
-            file_path = result["public_id"]
-
-        else:
-            # 💻 Local save for dev
-            file_path = default_storage.save(f"chat/files/{f.name}", f)
-            # Always return a single /media/ prefix
-            file_url = f"/media/{file_path.lstrip('/')}"
-
-        guessed_type, _ = mimetypes.guess_type(f.name)
-
-        return JsonResponse({
-            "url": file_url,          # ✅ always Cloudinary or /media/ URL
-            "path": file_path,        # optional internal reference
-            "display_url": file_url,  # URL for frontend preview
-            "name": f.name,
-            "saved_name": os.path.basename(file_path),
-            "size": f.size,
-            "type": guessed_type or f.content_type or "application/octet-stream",
-        })
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-
-
-@csrf_exempt
-def fetch_link_preview(request):
-    url = request.GET.get("url")
-    if not url:
-        return JsonResponse({"error": "Missing URL"}, status=400)
-
-    try:
-        r = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        title_tag = soup.find("meta", property="og:title") or soup.find("title")
-        desc_tag = soup.find("meta", property="og:description") or soup.find("meta", attrs={"name": "description"})
-        image_tag = soup.find("meta", property="og:image")
-
-        return JsonResponse({
-            "url": url,
-            "title": title_tag["content"] if title_tag and title_tag.has_attr("content") else (title_tag.string if title_tag else ""),
-            "description": desc_tag["content"] if desc_tag and desc_tag.has_attr("content") else "",
-            "image": image_tag["content"] if image_tag and image_tag.has_attr("content") else "",
-        })
-    except Exception as e:
-        return JsonResponse({
-            "url": url,
-            "title": url,  # fallback
-            "description": "",
-            "image": "",
-            "error": str(e)
-        }, status=200)
-
-
-
-from datetime import datetime, timedelta
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse, HttpResponseRedirect
-from django.shortcuts import render
-from django.utils import timezone
-from django.core.exceptions import ValidationError
-from .models import Event, AttendanceRecord, UserActivity
-from .utils import validate_church_proximity
-from .broadcast import broadcast_attendance_summary
-
-@login_required
-def mark_attendance(request):
-    """Handles attendance marking — supports AJAX for no page reload."""
     today = timezone.localdate()
-    now = timezone.localtime()
-    weekday = today.strftime("%A").lower()
+    last_30_days = today - timedelta(days=30)
 
-    events = Event.objects.filter(is_active=True)
-    available_events = []
+    # 🧠 Project admin system summary (no user selected)
+    if is_project_admin(user) and not user_id:
+        total_users = CustomUser.objects.filter(is_active=True, is_superuser=False).count() or 1
 
-    for e in events:
-        if e.event_type == "followup":
-            available_events.append(e)
-        elif e.day_of_week and e.day_of_week.lower() == weekday:
-            available_events.append(e)
-        elif e.event_type == "meeting" and weekday == "wednesday":
-            available_events.append(e)
-
-    # Only show “other” when there are real events
-    actual_events_today = [e for e in available_events if e.event_type != "followup"]
-    show_other_option = len(actual_events_today) > 0
-
-    # Weekly guest activity check
-    week_start = today - timedelta(days=today.weekday())
-    week_end = week_start + timedelta(days=6)
-    guest_activity_types = ["followup", "message", "guest_view", "call", "report", "other"]
-
-    user_guest_activity = UserActivity.objects.filter(
-        user=request.user,
-        activity_type__in=guest_activity_types,
-        created_at__date__gte=week_start,
-        created_at__date__lte=week_end,
-    ).exists()
-
-    # Whether user can mark now
-    can_mark_now = any(
-        e.time is None or now >= timezone.make_aware(datetime.combine(today, e.time))
-        for e in actual_events_today
-    )
-
-    # --- Handle POST ---
-    if request.method == "POST":
-        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
-
-        event_id = request.POST.get("event_id")
-        remarks = request.POST.get("remarks", "").strip()
-        status = request.POST.get("status", "present")
-        user_lat = request.POST.get("latitude")
-        user_lon = request.POST.get("longitude")
-        next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
-
-        # Find event or create custom one
-        if event_id == "other":
-            custom_name = request.POST.get("custom_event")
-            event, _ = Event.objects.get_or_create(
-                name=custom_name, event_type="custom", date=today
-            )
-        else:
-            event = Event.objects.get(id=event_id)
-
-        # ✅ Enforce physical presence validation for physical events
-        mode = (getattr(event, "attendance_mode", "") or "").lower()
-        is_physical = mode == "physical"
-
-        if status == "present" and is_physical:
-            try:
-                print(f"[DEBUG] Checking proximity for {request.user} at {user_lat},{user_lon}")
-                validate_church_proximity(user_lat, user_lon)
-            except ValidationError as e:
-                print(f"[DEBUG] Validation failed: {e}")
-                if is_ajax:
-                    # JSON response → frontend toast, modal stays open
-                    return JsonResponse({"success": False, "error": str(e)}, status=400)
-                else:
-                    # Fallback for non-AJAX form
-                    messages.error(request, str(e))
-                    return HttpResponseRedirect(next_url)
-
-        # Determine lateness
-        if status == "present" and event.time:
-            event_dt = datetime.combine(today, event.time)
-            if now > timezone.make_aware(event_dt + timedelta(minutes=15)):
-                status = "late"
-
-        # Save or update record
-        AttendanceRecord.objects.update_or_create(
-            user=request.user,
-            event=event,
-            date=today,
-            defaults={"status": status, "remarks": remarks},
+        # Aggregate attendance over last 30 days
+        records = AttendanceRecord.objects.filter(
+            user__is_superuser=False,
+            date__gte=last_30_days
         )
 
-        # 🔔 Notify live dashboard
-        broadcast_attendance_summary()
+        present = records.filter(status="present").count()
+        excused = records.filter(status="excused").count()
+        absent = records.filter(status="absent").count()
 
-        message_text = f"Attendance marked for {event.name} ({status})."
-        if is_ajax:
-            return JsonResponse({"success": True, "message": message_text})
-        else:
-            messages.success(request, message_text)
-            return HttpResponseRedirect(next_url)
+        # Convert to percentages
+        def pct(value):
+            return round((value / total_users) * 100, 1)
 
-    context = {
-        "events": available_events,
-        "show_other_option": show_other_option,
-        "skip_attendance": user_guest_activity,
-        "can_mark_now": can_mark_now,
-        "show_weekly_summary": today.weekday() == 5 and now.hour >= 20,
-    }
-    return render(request, "accounts/mark_attendance.html", context)
+        present_pct = pct(present)
+        excused_pct = pct(excused)
+        absent_pct = pct(absent)
 
+        # Clock summaries (total)
+        total_clock_in = ClockRecord.objects.filter(clock_in__isnull=False, user__is_superuser=False).count()
+        total_clock_out = ClockRecord.objects.filter(clock_out__isnull=False, user__is_superuser=False).count()
 
+        clock_in_pct = pct(total_clock_in)
+        clock_out_pct = pct(total_clock_out)
 
-from datetime import timedelta
-from django.utils import timezone
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from .models import Event, AttendanceRecord
-from django.db.models import Q
+        return JsonResponse({
+            "summary": {
+                "present": f"{present_pct}%",
+                "excused": f"{excused_pct}%",
+                "absent": f"{absent_pct}%",
+            },
+            "today": {
+                "clocked_in": False,
+                "clock_in": None,
+                "clock_out": None,
+            },
+            "totals": {
+                "clock_in": f"{clock_in_pct}%",
+                "clock_out": f"{clock_out_pct}%",
+            },
+        })
 
-@login_required
-def recent_event(request):
-    """Return the most recent event (within 45 mins) if active and not yet marked by user."""
-    now = timezone.localtime()
-    window_start = now - timedelta(minutes=45)
-    window_end = now + timedelta(minutes=5)
-    weekday = now.strftime("%A").lower()
+    # 🧍 Regular or user-specific summary
+    if user_id and is_project_admin(user):
+        target_user = get_object_or_404(CustomUser, id=user_id)
 
-    # Include today's dated events OR weekly recurring events for today
-    events_today = Event.objects.filter(
-        Q(date=now.date()) | Q(day_of_week=weekday),
-        is_active=True
-    )
+    # Attendance counts (last 30 days)
+    records = AttendanceRecord.objects.filter(user=target_user, date__gte=last_30_days)
+    present = records.filter(status="present").count()
+    excused = records.filter(status="excused").count()
+    absent = records.filter(status="absent").count()
 
-    recent_event = None
-    for event in events_today:
-        # If event has explicit date & time
-        if event.date and event.time:
-            event_dt = timezone.make_aware(
-                timezone.datetime.combine(event.date, event.time),
-                timezone.get_current_timezone()
-            )
-        # Otherwise, treat recurring events as happening "today" at their time
-        elif event.day_of_week and event.time:
-            event_dt = timezone.make_aware(
-                timezone.datetime.combine(now.date(), event.time),
-                timezone.get_current_timezone()
-            )
-        else:
-            # Skip undated + timeless events (like follow-ups)
-            continue
+    # Today's clock record
+    today_clock = ClockRecord.objects.filter(user=target_user, date=today).first()
+    clocked_in = today_clock.is_clocked_in if today_clock else False
 
-        print(f"Now={now}, Event={event_dt}, Match={window_start <= event_dt <= window_end}")
-
-        if window_start <= event_dt <= window_end:
-            recent_event = event
-            break
-
-    if not recent_event:
-        return JsonResponse({"event": None})
-
-    MARKED_STATUSES = ("present", "late", "excused")
-
-    already_marked = AttendanceRecord.objects.filter(
-        user=request.user,
-        event=recent_event,
-        date=now.date(),
-        status__in=MARKED_STATUSES
-    ).exists()
-
-    if already_marked:
-        print(f"User {request.user} already marked for event {recent_event.name}")
-        return JsonResponse({"event": None})
+    # Total clock summaries (lifetime)
+    total_clock_in = ClockRecord.objects.filter(user=target_user, clock_in__isnull=False).count()
+    total_clock_out = ClockRecord.objects.filter(user=target_user, clock_out__isnull=False).count()
 
     return JsonResponse({
-        "event": {
-            "id": recent_event.id,
-            "name": recent_event.name,
-            "date": str(now.date()),
-            "time": recent_event.time.strftime("%H:%M:%S") if recent_event.time else None,
-        }
+        "summary": {
+            "present": present,
+            "excused": excused,
+            "absent": absent,
+        },
+        "today": {
+            "clocked_in": clocked_in,
+            "clock_in": today_clock.clock_in.strftime("%H:%M") if today_clock and today_clock.clock_in else None,
+            "clock_out": today_clock.clock_out.strftime("%H:%M") if today_clock and today_clock.clock_out else None,
+        },
+        "totals": {
+            "clock_in": total_clock_in,
+            "clock_out": total_clock_out,
+        },
     })
 
 
 
-from datetime import timedelta, date
-from django.utils import timezone
-from .models import Event, PersonalReminder
-from datetime import date, datetime, timedelta, time
-from django.utils import timezone
 
-from datetime import date, timedelta
-from django.utils import timezone
 
-def get_calendar_items(user):
+from django.http import JsonResponse
+from django.utils import timezone
+from datetime import timedelta
+from workforce.models import ClockRecord, Event
+
+CHURCH_LAT, CHURCH_LON = 6.641732871081892, 3.3706539797031843
+THRESHOLD_KM = 0.01  # ~10 meters
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (math.sin(d_lat / 2) ** 2 +
+         math.cos(math.radians(lat1)) *
+         math.cos(math.radians(lat2)) *
+         math.sin(d_lon / 2) ** 2)
+    return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+
+
+@login_required
+def clock_action(request):
+    """Handles only clock-out — clock-in now happens during attendance marking."""
+    user = request.user
     today = timezone.localdate()
-    start_of_year = date(today.year, 1, 1)
-    end_of_year = date(today.year, 12, 31)
+    event_id = request.POST.get("event_id")
+    latitude = request.POST.get("latitude")
+    longitude = request.POST.get("longitude")
+    action = request.POST.get("action")
 
-    events = Event.objects.filter(is_active=True)
-    reminders = PersonalReminder.objects.filter(user=user, date__gte=today)
+    if not action or action not in ["clock_in", "clock_out"]:
+        return JsonResponse({"success": False, "error": "Invalid or missing action."}, status=400)
 
-    calendar_items = []
+    event = Event.objects.filter(id=event_id).first()
+    if not event:
+        return JsonResponse({"success": False, "error": "Event not found."}, status=404)
 
-    weekday_map = {
-        'sunday': 6,
-        'monday': 0,
-        'tuesday': 1,
-        'wednesday': 2,
-        'thursday': 3,
-        'friday': 4,
-        'saturday': 5,
-    }
+    clock, _ = ClockRecord.objects.get_or_create(user=user, date=today, event=event)
 
-    color_map = {
-        "service": "#3b82f6",
-        "meeting": "#10b981",
-        "training": "#8b5cf6",
-        "followup": "#e11d48",
-        "reminder": "#f59e0b",
-        "other": "#9ca3af",
-    }
+    # Handle clock-out validation (with GPS)
+    if action == "clock_out":
+        if event and event.attendance_mode.lower() == "physical":
+            try:
+                distance_km = haversine_distance(float(latitude), float(longitude), CHURCH_LAT, CHURCH_LON)
+                if distance_km > THRESHOLD_KM:
+                    return JsonResponse({"success": False, "error": "You are outside the allowed range for clock-out."})
+            except Exception:
+                return JsonResponse({"success": False, "error": "Unable to verify your location."})
 
-    def build_datetime(d, t):
-        if not t:
-            return d.isoformat()
-        return datetime.combine(d, t).isoformat()
+        # Prevent duplicate clock-out
+        if clock.clock_out:
+            return JsonResponse({"success": False, "error": "You have already clocked out today."})
+        clock.mark_clock_out()
 
-    for e in events:
-        event_type = (e.event_type or "other").lower()
-        color = color_map.get(event_type, "#4dabf7")
+    elif action == "clock_in":
+        # Prevent duplicate clock-in
+        if clock.clock_in:
+            return JsonResponse({"success": False, "error": "You have already clocked in today."})
+        clock.mark_clock_in()
 
-        base_event = {
-            "title": e.name,
-            "type": e.event_type,
-            "mode": getattr(e, "mode", ""),
-            "color": color,
-            "description": getattr(e, "description", ""),
-            "time": e.time.strftime("%H:%M") if e.time else None,
-            "duration_days": getattr(e, "duration_days", 1),
-        }
-
-        if e.date and e.duration_days > 1:
-            start = build_datetime(e.date, e.time)
-            end = build_datetime(e.date + timedelta(days=e.duration_days - 1), e.time)
-            calendar_items.append({**base_event, "start": start, "end": end})
-
-        elif e.date:
-            calendar_items.append({**base_event, "start": build_datetime(e.date, e.time)})
-
-        elif e.is_recurring_weekly and e.day_of_week:
-            current = start_of_year
-            weekday = weekday_map.get(e.day_of_week.lower())
-            while current <= end_of_year:
-                if current.weekday() == weekday:
-                    calendar_items.append({
-                        **base_event,
-                        "start": build_datetime(current, e.time),
-                    })
-                current += timedelta(days=1)
-
-    # Reminders
-    for r in reminders:
-        calendar_items.append({
-            "title": r.title,
-            "start": build_datetime(r.date, getattr(r, "time", None)),
-            "type": "reminder",
-            "mode": "personal",
-            "color": color_map["reminder"],
-            "description": getattr(r, "note", ""),
-        })
-
-    return calendar_items
+    return JsonResponse({
+        "success": True,
+        "action": action,
+        "clock_in": clock.clock_in.strftime("%H:%M") if clock.clock_in else None,
+        "clock_out": clock.clock_out.strftime("%H:%M") if clock.clock_out else None,
+    })
 
 
 
 
-@login_required
-def add_personal_reminder(request):
-    if request.method == "POST":
-        title = request.POST.get("title")
-        description = request.POST.get("description")
-        date = request.POST.get("date")
-        time = request.POST.get("time") or None
-
-        PersonalReminder.objects.create(
-            user=request.user,
-            title=title,
-            description=description,
-            date=date,
-            time=time
-        )
-        messages.success(request, "Reminder added!")
-        return redirect("accounts:admin-dashboard")
-
-    return render(request, "accounts/add_reminder.html")
-
-
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden, JsonResponse
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from accounts.forms import EventForm
-
-from django.template.loader import render_to_string
-from django.http import JsonResponse
-
-@login_required
-def manage_events(request):
-    if not user_in_groups(request.user, "Pastor"):
-        return HttpResponseForbidden("You don't have permission to manage events.")
-
-    if request.method == "POST":
-        form = EventForm(request.POST)
-        if form.is_valid():
-            event = form.save(commit=False)
-            event.created_by = request.user
-            event.save()
-
-            html = render_to_string("accounts/partials/event_item.html", {"event": event})
-            return JsonResponse({"status": "success", "html": html})
-        return JsonResponse({"status": "error", "errors": form.errors}, status=400)
-
-    form = EventForm()
-    events = Event.objects.filter(is_active=True).order_by("date")
-    return render(request, "accounts/manage_events.html", {"form": form, "events": events, "page_title": "Programmes"})
-
-
-@login_required
-def edit_event(request, pk):
-    event = get_object_or_404(Event, pk=pk)
-    if request.method == "POST":
-        form = EventForm(request.POST, instance=event)
-        if form.is_valid():
-            form.save()
-            html = render_to_string("accounts/partials/event_item.html", {"event": event})
-            return JsonResponse({"status": "success", "html": html})
-        return JsonResponse({"status": "error", "errors": form.errors}, status=400)
-    return JsonResponse({"status": "invalid"}, status=405)
-
-
-@login_required
-def delete_event(request, pk):
-    event = get_object_or_404(Event, pk=pk)
-    event.delete()
-    return JsonResponse({"status": "deleted"})
 
 
 
 
-from datetime import date, datetime, timedelta, time
-from django.utils import timezone
-from django.http import JsonResponse
-
-
-from datetime import date, timedelta
-from django.http import JsonResponse
-
-def api_events(request):
-    """Return JSON for FullCalendar with proper mode, color, and 24hr time."""
-    events = Event.objects.filter(is_active=True)
-    data = []
-
-    weekday_map = {
-        'monday': 0,
-        'tuesday': 1,
-        'wednesday': 2,
-        'thursday': 3,
-        'friday': 4,
-        'saturday': 5,
-        'sunday': 6,
-    }
-
-    color_map = {
-        "service": "#3b82f6",
-        "meeting": "#10b981",
-        "training": "#8b5cf6",
-        "reminder": "#f59e0b",
-        "event": "#e11d48",
-        "other": "#9ca3af",
-    }
-
-    today = date.today()
-    start_of_year = date(today.year, 1, 1)
-    end_of_year = date(today.year, 12, 31)
-
-    for e in events:
-        event_type = (e.event_type or "other").lower()
-        color = color_map.get(event_type, "#4dabf7")
-
-        base_event = {
-            "title": e.name,
-            "color": color,
-            "extendedProps": {
-                "type": e.event_type,
-                "mode": getattr(e, "mode", ""),
-                "location": getattr(e, "location", ""),
-                "description": getattr(e, "description", ""),
-                "time": e.time.strftime("%H:%M") if e.time else None,
-            },
-        }
-
-        # Determine start with proper datetime
-        def build_datetime(d, t):
-            if not t:
-                return d.isoformat()
-            dt = datetime.combine(d, t)
-            return dt.isoformat()
-
-        if e.date:
-            start_date = e.date
-            end_date = e.end_date or (start_date + timedelta(days=getattr(e, "duration_days", 1) - 1))
-            base_event["start"] = build_datetime(start_date, e.time)
-            base_event["end"] = build_datetime(end_date, e.time)
-            data.append(base_event)
-
-        elif e.is_recurring_weekly and e.day_of_week:
-            weekday = weekday_map.get(e.day_of_week.lower())
-            if weekday is not None:
-                current = start_of_year
-                while current <= end_of_year:
-                    if current.weekday() == weekday:
-                        recurring = base_event.copy()
-                        recurring["start"] = build_datetime(current, e.time)
-                        data.append(recurring)
-                    current += timedelta(days=1)
-
-    return JsonResponse(data, safe=False)
-
-
-
-
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
-from django.utils import timezone
-import json
-from .models import UserActivity
-
-@csrf_exempt
-@login_required
-def log_user_activity(request):
-    """Silent logging endpoint for guest/follow-up interactions."""
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-            activity_type = data.get("activity_type", "other")
-            guest_id = data.get("guest_id")
-            description = data.get("description", "")
-
-            UserActivity.objects.create(
-                user=request.user,
-                activity_type=activity_type,
-                guest_id=guest_id,
-                description=description,
-                created_at=timezone.now(),
-            )
-
-            return JsonResponse({"status": "success"}, status=201)
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
-    return JsonResponse({"status": "invalid_request"}, status=405)
-
-
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.utils import timezone
-from .models import Event
-
-@login_required
-def get_active_events(request):
-    """
-    Returns active events — both one-time (with date) and recurring (without date).
-    """
-    events = Event.objects.filter(is_active=True)
-    data = []
-
-    for e in events:
-        # Handle one-time events
-        if e.date:
-            date_str = e.date.strftime("%Y-%m-%d")
-            time_str = e.time.strftime("%H:%M") if e.time else None
-            label = e.name
-        else:
-            # Recurring events (like weekly services)
-            date_str = None
-            time_str = e.time.strftime("%H:%M") if e.time else None
-            label = f"{e.name} (Recurring)"
-
-        data.append({
-            "id": e.id,
-            "name": label,
-            "date": date_str,
-            "time": time_str,
-            "event_type": e.event_type,
-            "is_recurring": not bool(e.date),
-        })
-
-    return JsonResponse(data, safe=False)

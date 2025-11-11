@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load form_tags %}
-{% load group_tags %}
+{% load access_tags %}
 
 {% get_media_prefix as MEDIA_URL %}
 
@@ -157,6 +157,20 @@
                             </svg>
                           </span>
                           {{ field|add_class:"form-select bg-grey text-white border-0" }}
+                        {% elif field.name == 'teams' %}
+                          <div id="team-role-container" class="mt-3">
+                            <div id="team-role-list"></div>
+                            <button type="button" id="add-team-role" class="btn btn-grey-900 mt-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-users-group">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 13a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                                <path d="M8 21v-1a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v1" /><path d="M15 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                                <path d="M17 10h2a2 2 0 0 1 2 2v1" /><path d="M5 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M3 13v-1a2 2 0 0 1 2 -2h2" />
+                              </svg> 
+                              Add Team
+                            </button>
+                          </div>
+                          <input type="hidden" id="teamsHiddenInput" name="teamsHiddenInput" value="">
+                          
                         {% elif field.name == 'is_active' %}
                           <div class="form-check">
                               {{ form.is_active }}
@@ -301,6 +315,29 @@
 
       </div>
     </div>
+  </div>
+</div>
+
+<style>
+  .dropdown-menu {
+    border: none;
+    border-radius: 0.75rem;
+    background-color: #111827 !important;
+  }
+
+  .dropdown-menu .accordion-button {
+    background-color: #111827 !important;
+    color: #fff;
+  }
+
+  .dropdown-menu .accordion-button:not(.collapsed) {
+    background-color: #2e303e !important;
+  }
+
+  .dropdown-menu .accordion-body {
+    background-color: #111827 !important;
+  }
+</style>
 
 <!-- Image Preview Script -->
 <script>
@@ -313,25 +350,147 @@
   }
 </script>
 
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const toggleBtn = document.getElementById("togglePasswordBtn");
-    const passwordSection = document.getElementById("passwordFields");
+{{ preloadedTeamRoles|json_script:"preloadedTeamRoles" }}
 
-    // In edit mode, password fields are hidden initially
-    toggleBtn?.addEventListener("click", () => {
-      if (passwordSection.style.display === "none" || passwordSection.style.display === "") {
-        passwordSection.style.display = "flex";
-      } else {
-        passwordSection.style.display = "none";
-        // Clear password fields when hiding
-        passwordSection.querySelectorAll("input").forEach(input => input.value = "");
-      }
-    });
+
+<script>
+document.addEventListener("DOMContentLoaded", async function () {
+  const toggleBtn = document.getElementById("togglePasswordBtn");
+  const passwordSection = document.getElementById("passwordFields");
+  const groupSelect = document.getElementById("id_group");
+  const addBtn = document.getElementById("add-team-role");
+  const container = document.getElementById("team-role-list");
+  const hiddenInput = document.getElementById("teamsHiddenInput");
+  
+
+  // Password toggle (unchanged)
+  toggleBtn?.addEventListener("click", () => {
+    const isHidden = passwordSection.style.display === "none" || passwordSection.style.display === "";
+    passwordSection.style.display = isHidden ? "flex" : "none";
+    if (!isHidden) passwordSection.querySelectorAll("input").forEach(i => i.value = "");
   });
+
+  let availableTeams = [];
+  let availableRoles = [];
+
+  // Fetch data helper
+  async function loadData(group) {
+    const [teamRes, roleRes] = await Promise.all([
+      fetch(`/accounts/ajax/load-teams/?group=${group}`),
+      fetch(`/accounts/ajax/load-roles/?group=${group}`)
+    ]);
+    availableTeams = await teamRes.json();
+    availableRoles = await roleRes.json();
+  }
+
+  // --- Update hidden input with id:role,id:role format ---
+  function updateHiddenInput() {
+    const pairs = [];
+    container.querySelectorAll(".team-role-row").forEach(row => {
+      const teamId = row.querySelector(".team-select").value;
+      const role = row.querySelector(".role-select").value;
+      if (teamId && role) pairs.push(`${teamId}:${role}`);
+    });
+    hiddenInput.value = pairs.join(",");
+  }
+
+  // --- Add a new Team-Role row ---
+  function addTeamRoleRow(selectedTeam = "", selectedRole = "") {
+    const row = document.createElement("div");
+    row.classList.add("team-role-row", "d-flex", "align-items-center", "mb-2", "gap-2", "border-0");
+
+    const teamSelect = document.createElement("select");
+    teamSelect.classList.add("form-select", "team-select");
+    teamSelect.innerHTML = `
+      ${availableTeams.map(t =>
+        `<option value="${t.id}" ${t.id == selectedTeam ? "selected" : ""}>${t.name}</option>`
+      ).join("")}
+    `;
+
+    const roleSelect = document.createElement("select");
+    roleSelect.classList.add("form-select", "role-select");
+    roleSelect.innerHTML = `
+      <option value="">Select Role</option>
+      ${availableRoles.map(r =>
+        `<option value="${r}" ${r === selectedRole ? "selected" : ""}>${r}</option>`
+      ).join("")}
+    `;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.classList.add("avatar", "border-0", "d-flex", "align-items-center", "justify-content-center");
+    removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff000083" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-row-remove">
+                              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                              <path d="M20 6v4a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1z" />
+                              <path d="M10 16l4 4" /><path d="M10 20l4 -4" />
+                              </svg>`;
+    removeBtn.onclick = () => {
+      row.remove();
+      updateHiddenInput();
+    };
+
+    [teamSelect, roleSelect].forEach(el => el.addEventListener("change", updateHiddenInput));
+
+    row.append(teamSelect, roleSelect, removeBtn);
+    container.appendChild(row);
+
+    updateHiddenInput();
+  }
+
+  // --- Handle group change ---
+  groupSelect.addEventListener("change", async () => {
+    const group = groupSelect.options[groupSelect.selectedIndex].text;
+    if (!group) return;
+
+    await loadData(group);
+    container.innerHTML = ""; // reset
+    hiddenInput.value = "";
+  });
+
+  // --- Add new manually ---
+  addBtn.addEventListener("click", () => {
+    if (!availableTeams.length) {
+      alert("Please select a Group first.");
+      return;
+    }
+    addTeamRoleRow();
+  });
+
+  // --- Prepopulate edit mode ---
+  const preloadedData = JSON.parse(document.getElementById("preloadedTeamRoles").textContent || "{}");
+  const preloadedPairs = preloadedData.userMemberships || [];
+  console.log("Preloaded pairs:", preloadedPairs);
+
+  async function initEditMode() {
+    if (!preloadedPairs.length) return;
+
+    // Wait for group select to have a valid value
+    const selectedGroup = groupSelect.options[groupSelect.selectedIndex]?.text?.trim();
+    if (!selectedGroup) return;
+
+    // Fetch teams/roles for this group
+    await loadData(selectedGroup);
+
+    // Clear container just in case
+    container.innerHTML = "";
+
+    // Add rows for each preloaded pair
+    preloadedPairs.forEach(({ team_id, team_role }) => {
+      addTeamRoleRow(team_id, team_role);
+    });
+
+    // Update hidden input after rendering
+    updateHiddenInput();
+  }
+
+  // Delay initialization slightly to ensure form is ready
+  window.addEventListener("load", initEditMode);
+  
+});
 </script>
 
-</div>
+
+
 {% endblock %}
 
 

@@ -414,6 +414,10 @@
   transition: transform 0.3s ease-in-out;
 }
 
+.row.row-deck .card {
+  border-radius: 24px;
+}
+
 /* ============================
    11. Advanced table layout fixes
    ============================ */
@@ -562,6 +566,218 @@
         max-width: 90vw !important;
     }
 }
+
+/************************/
+/* Dashboard Welcome Text
+/************************/
+@keyframes typing {
+  0% { width: 0; }
+  60%, 80% { width: 100%; }
+  100% { width: 0; }
+}
+
+@keyframes fadeText {
+  0%, 90%, 100% { opacity: 0; }
+  10%, 80% { opacity: 1; }
+}
+
+.typing-text {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 1.5rem;
+  font-style: italic;
+  font-weight: 600;
+  vertical-align: middle;
+  width: 0;
+  color: var(--user-color);
+  animation: typing 6s steps(20, end) infinite, fadeText 6s ease-in-out infinite;
+}
+
+
+/* Dashboard User Marquee Scroll */
+/* Continuous marquee effect */
+.scroll-container {
+  position: relative;
+}
+
+.scroll-wrapper {
+  --speed: 80s;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE */
+  position: relative;
+  mask-image: linear-gradient(to right, transparent 0%, black 64px, black calc(100% - 64px), transparent 100%);
+}
+
+/* Fixed overlay at the left edge of the marquee */
+.team-name-overlay {
+  position: absolute;
+  left: 0;
+  top: 70%;
+  transform: translateY(-50%);
+  z-index: 20; /* above the marquee track */
+  font-size: 0.6rem;
+  background: rgba(0, 0, 0, 0.616); /* semi-transparent for readability */
+  color: white;
+  font-style: italic;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none; /* allow scrolling behind it */
+}
+
+.scroll-wrapper::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+.scroll-track {
+  display: flex;
+  gap: 1rem;
+  min-width: max-content;
+  animation: scroll-marquee var(--speed) linear infinite;
+  scroll-snap-type: x mandatory;
+  will-change: transform;
+}
+
+.user-card-wrapper {
+  scroll-snap-align: start;
+  list-style: none;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+  box-shadow: #000000;
+}
+
+.user-card-wrapper:hover {
+  transform: scale(1.05);
+}
+
+/* The continuous scroll illusion */
+@keyframes scroll-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Pauses animation on hover for manual scroll */
+.scroll-wrapper:hover .scroll-track {
+  animation-play-state: paused;
+}
+
+/* Optional soft shadow for contrast */
+.user-card-wrapper .user-card {
+  box-shadow: 0 4px 8px #000000d2;
+  padding: 0 auto;
+}
+
+
+/* Team - Role Switch Animation - User List */
+.team-role-container {
+  min-width: 280px;
+  height: 24px; /* Adjust to your badge height */
+}
+
+.team-role-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 1;
+  transform: translateY(0);
+  transition: transform 0.5s ease, opacity 0.5s ease;
+  font-size: small;
+}
+
+.team-role-item.slide-out {
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+.team-role-item.slide-in {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+
+/* Team Switch Animation - Dashboard */
+.team-container {
+  min-width: 120px;
+  height: 20px; /* Adjust to your badge height */
+}
+
+.team-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 1;
+  transform: translateY(0);
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.team-item.slide-out {
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+.team-item.slide-in {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+
+/* Magnet Guest Count */
+.gradient-border {
+  position: relative;
+  display: inline-block;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #1e1e1e;
+  z-index: 0;
+}
+
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px; /* border thickness */
+  border-radius: inherit;
+  background: linear-gradient(90deg, 
+    #f59f008c, 
+    #394255, 
+    #ffd04d, 
+    #f97316, 
+    #14f50088);
+  background-size: 400% 400%;
+  animation: borderflow 6s linear infinite;
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  /* Standard mask for non-WebKit browsers */
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  z-index: -1;
+}
+
+@keyframes borderflow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 400% 50%;
+  }
+}
+
+
+
+
+
+
 
 /* Popup styling */
 #userGuestPopup { position: fixed; top: 0; left:0; right:0; bottom:0; z-index:2000; }
@@ -843,9 +1059,178 @@
   margin: 0;                    /* optional: remove extra spacing */
 }
 
+/* ================== TEAM SELECTOR ================== */
+.team-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 5px 10px;
+  justify-content: center;
+}
+
+.team-selector .team-btn {
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  padding: 8px 10px;
+  gap: 2px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.25s ease;
+  box-shadow: 0 0 0 #000000d2;
+}
+
+.team-selector .team-btn:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+.team-selector .team-btn.active-team {
+  transform: scale(0.85);
+  box-shadow: inset 0 3px 6px #000000d2;
+  opacity: 0.95;
+  background: #f59f0080;
+}
+
+/* ================== TEAM USER STRIP WRAPPER ================== */
+#activeUserListWrapper {
+  position: relative;
+  top: 0;
+  z-index: 50;
+  display: block;
+  width: 100%;
+  background: #111827;
+  padding: 0;
+  max-height: 0;
+  box-sizing: border-box;
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 0; /* hidden by default */
+  transition: max-height 0.3s ease, padding 0.3s ease, top 0.3s ease;
+}
+
+#activeUserListWrapper.visible {
+  min-height: 80px; /* expanded height */
+  padding: 4px 6px;
+}
+
+/* INNER horizontal scroller */
+#activeUserList {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  width: 100%;
+  height: 80px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbars on all browsers */
+#activeUserList::-webkit-scrollbar { display: none; }
+#activeUserList { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Scrollbar thumb for desktop */
+.team-user-strip::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+}
+
+/* ================== USER CARD ================== */
+.user-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 180px;
+  border-radius: 10px;
+  padding: 1px 2px;
+  background: #1f2937;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.user-card:hover {
+  transform: scale(0.98);
+  background: rgba(255,255,255,0.1);
+}
+
+/* ONLINE DOT */
+.online-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #2ecc71;
+  border: 2px solid var(--tblr-bg-surface, #1e1e1e);
+  box-shadow: 0 0 3px rgba(46, 204, 113, 0.6);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.user-card:not(.online) .online-dot {
+  display: none;
+}
+
+/* ================== RESPONSIVE ================== */
+@media (max-width: 768px) {
+  #activeUserListWrapper.visible {
+    min-height: 60px; /* expanded height */
+    padding: 4px 6px;
+  }
+
+  #activeUserList {
+    display: flex;
+    align-items: center; /* vertically center inside wrapper */
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding: 4px 6px;
+    max-height: 60px;
+    border-radius: 10px;
+  }
+
+  .user-card {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 120px;
+    padding: 1px 2px;
+    border-radius: 10px;
+    flex: 0 0 auto;
+    background: #1f2937;
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .user-card .card-body {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem; /* tighter spacing */
+    padding: 2px 4px;
+  }
+
+  .user-card img,
+  .user-card .avatar {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+  }
+
+  .user-card .flex-grow-1 {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+
 #stickyDateHeader {
   position: absolute;
-  top: 0px;
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -860,7 +1245,7 @@
   justify-content: center;
   margin: 0 auto;
   transition: opacity 0.3s ease, transform 0.3s ease;
-  z-index: 50;
+  z-index: 10;
   pointer-events: none;
   opacity: 0;
 }
@@ -1166,11 +1551,12 @@
 .chat-wrapper .chat-column .card-body::before {
   content: "";
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 2rem;
+  top: 80px; left: 0; right: 0; bottom: 2rem;
   background: url('/static/images/church_logo.png') no-repeat center;
-  background-size: 470px;
+  background-size: 350px;
   opacity: 0.09; /* faint watermark */
   pointer-events: none; /* don’t block clicks/scroll */
+  z-index: 0;
 }
 
 
@@ -1186,12 +1572,13 @@
 /* Stack container (top-left fixed) */
 .pinned-preview {
   position: absolute;
-  top: 35px;
+  top: 0;
   left: 20px;
   display: flex;
   flex-direction: column-reverse; /* newest at bottom */
   gap: 5px;
   z-index: 50;
+  transition: top 0.3s ease; /* smooth slide with banner */
 }
 
 /* Outer card wrapping pinner + preview bubble */
@@ -1337,6 +1724,7 @@
   border: none !important;
   box-shadow: none !important;
   margin-bottom: 0.75rem;
+  padding: 2px 0;
 }
 
 /* Center title and make smaller */
@@ -1368,23 +1756,26 @@
 .fc .fc-col-header-cell {
   background: #111827 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #f59f00; /* orange text for days */
+  color: #f97316; /* orange text for days */
   font-weight: 700;
+  font-size: 1rem;
   padding-top: 0;
 }
 
 /* Give FullCalendar a rounded border and soft shadow */
 .fc {
-  border-radius: 8px;
+  background-color: #1F2937;
+  border-radius: 24px;
   padding: 8px;
   box-shadow: 0 4px 12px #000000c0;
 }
 
 .fc .fc-daygrid {
   overflow: hidden; /* ensures the inner cells follow the rounding */
-  padding: 2px 0;
-  background-color: #f9741638;
-  border-radius: 8px;
+  padding: 4px 4px;
+  background-color: #111827;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px #000000c0;
 }
 
 /* Calendar body background */
@@ -1394,16 +1785,16 @@
 
 /* Optional: add subtle glow or border for better visibility */
 .fc-daygrid-day.fc-day-today .fc-daygrid-day-frame {
-  background-color: #111827;
-  border: 6px;
-  box-shadow: 0 0 8px #000000c0;
+  background-color: #1F2937;
+  color: #f97316;
+  box-shadow: 0 0 12px #000000c0;
 }
 
 .fc .fc-daygrid.fc-day-today {
   overflow: hidden; /* ensures the inner cells follow the rounding */
   padding: 2px 0;
-  background-color: #1c3536;
-  border-radius: 8px;
+  background-color: transparent !important;
+  box-shadow: 0 0 12px #000000c0;
 }
 
 
@@ -1544,8 +1935,6 @@
 }
 
 
-
-
 /* Centered alert inside modal */
 #attendanceModal .alert {
   max-width: 80%;
@@ -1569,6 +1958,149 @@
 }
 
 
+/* Attendance Modal Carousel Overlay */
+.overlay-status {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.8rem;
+  background: #000000;
+  box-shadow: #000000d2;
+  border-radius: 6px;
+  padding: 3px 6px;
+}
 
+.carousel-eventmode {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 0.8rem;
+  background: #000000;
+  box-shadow: #000000d2;
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.register-btn {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  font-size: 0.8rem;
+  background: #000000;
+  box-shadow: #000000d2;
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  color: #f97316
+}
+
+#teamSelectionRow .team-btn.active {
+  transform: scale(0.85);
+  box-shadow: inset 0 3px 6px #000000d2;
+  opacity: 0.95;
+  color: #ffffff;
+  background: #f59f0080 !important;
+}
+
+.start-event-btn {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.start-event-btn:hover {
+  color: #38bdf8; /* or any highlight color matching your theme */
+}
+
+.pulse-success {
+  animation: pulseSuccess 0.8s ease;
+}
+
+@keyframes pulseSuccess {
+  0% { transform: scale(1); background-color: inherit; }
+  50% { transform: scale(1.1); background-color: #16a34a; }
+  100% { transform: scale(1); background-color: inherit; }
+}
+
+.blur {
+  filter: blur(3px);
+  pointer-events: none;
+}
+.cursor-pointer {
+  cursor: pointer;
+}
+
+
+/**********************
+Dashboard Event Carousel
+/*********************/
+.vertical-carousel {
+  position: relative;
+  overflow: hidden;
+  height: 60vh;
+}
+
+.team-slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 1s ease, transform 1s ease;
+}
+
+.team-slide.active {
+  opacity: 1;
+  transform: translateY(0);
+  position: relative;
+}
+
+#dashboardEventCarousel .right-badge {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  font-size: 0.8rem;
+  box-shadow: #000000d2;
+  border-radius: 6px;
+  padding: 3px 6px;
+  }
+
+#dashboardEventCarousel .left-badge {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  font-size: 0.8rem;
+  box-shadow: #000000d2;
+  border-radius: 6px;
+  padding: 3px 6px;
+  }
+
+
+/* Wiggle for attendance event countdown */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(10deg); }
+  50% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+
+.countdown-end-wiggle {
+  display: inline-block;
+  animation: wiggle 0.2s infinite;
+  transform-origin: center;
+}
+
+/* Wiggle for start countdown */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(10deg); }
+  50% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+
+.countdown-start-wiggle {
+  display: inline-block;
+  animation: wiggle 0.6s infinite;
+  transform-origin: center;
+}
 
 

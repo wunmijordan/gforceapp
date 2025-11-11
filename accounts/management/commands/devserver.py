@@ -11,7 +11,7 @@ class Command(BaseCommand):
         try:
             subprocess.run([
                 "uvicorn",
-                "gatewaymagnetapp.asgi:application",
+                "gforceapp.asgi:application",
                 "--reload",
                 "--host", "0.0.0.0",
                 "--port", "8000",

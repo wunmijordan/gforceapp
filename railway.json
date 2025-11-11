@@ -4,6 +4,6 @@
     "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
   },
   "deploy": {
-    "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gatewaymagnetapp.asgi:application'"
+    "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'"
   }
 }

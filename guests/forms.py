@@ -1,10 +1,12 @@
 from django import forms
-from .models import GuestEntry
+from .models import GuestEntry, FollowUpReport
 from django.core.exceptions import ValidationError
 import datetime
-from .models import FollowUpReport
 from django.utils.timezone import localdate
 from django.contrib.auth import get_user_model
+from workforce.models import Team
+from accounts.models import CustomUser as User, TeamMembership
+from accounts.utils import is_project_admin, is_magnet_admin
 
 User = get_user_model()
 
@@ -114,20 +116,40 @@ class GuestEntryForm(forms.ModelForm):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
-        # Conditionally show assigned_to
-        if user and (user.is_superuser or user.groups.filter(name__in=['Pastor', 'Team Lead', 'Admin']).exists()):
-            if user.is_superuser:
-                qs = User.objects.filter(is_active=True)
+        # Only show 'assigned_to' for magnet admins or project admins
+        if user and (is_project_admin(user) or is_magnet_admin(user, "Minister-in-Charge,Team Admin")):
+            magnet_team = Team.objects.filter(name__iexact="magnet").first()
+
+            if magnet_team:
+                # Get IDs of all members in the Magnet team
+                magnet_user_ids = TeamMembership.objects.filter(
+                    team=magnet_team
+                ).values_list("user_id", flat=True)
+
+                # Filter only active users in Magnet team
+                qs = User.objects.filter(
+                    id__in=magnet_user_ids,
+                    is_active=True
+                ).exclude(is_superuser=True)
+
+                # Exclude project admins (Pastor/Admin roles)
+                qs = [u for u in qs if not is_project_admin(u)]
+
+                # Convert back to QuerySet
+                self.fields["assigned_to"].queryset = User.objects.filter(
+                    id__in=[u.id for u in qs]
+                ).order_by("full_name")
+
+                self.fields["assigned_to"].required = True
+
+                # Label: "Title Full Name"
+                self.fields["assigned_to"].label_from_instance = (
+                    lambda obj: f"{obj.title or ''} {obj.full_name}".strip()
+                )
             else:
-                qs = User.objects.filter(is_active=True, is_superuser=False)
-            self.fields['assigned_to'].queryset = qs
-            self.fields['assigned_to'].required = True
-
-            # Use title + full_name as label, default title to ""
-            self.fields['assigned_to'].label_from_instance = lambda obj: f"{obj.title or ''} {obj.full_name}".strip()
-
+                self.fields.pop("assigned_to", None)
         else:
-            self.fields.pop('assigned_to', None)
+            self.fields.pop("assigned_to", None)
 
 
         # ---------------------------

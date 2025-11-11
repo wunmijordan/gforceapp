@@ -1,29 +1,106 @@
-import json, re
-import logging
+import json, re, urllib.parse, logging, hashlib
 from datetime import timedelta
 from django.utils.timezone import now
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.utils import timezone
 
 
 logger = logging.getLogger(__name__)
 
-
-
 # =================== Helpers ===================
-def get_user_color(user_id):
-    colors = [
-        "bg-blue-lt text-white","bg-green-lt text-white","bg-orange-lt text-white",
-        "bg-purple-lt text-white","bg-pink-lt text-white","bg-cyan-lt text-white",
-        "bg-yellow-lt text-white","bg-red-lt text-white","bg-indigo-lt text-white",
-        "bg-teal-lt text-white","bg-lime-lt text-white","bg-amber-lt text-white",
-        "bg-fuchsia-lt text-white","bg-emerald-lt text-white","bg-violet-lt text-white",
-        "bg-rose-lt text-white","bg-sky-lt text-white","bg-orange-200 text-white",
-        "bg-purple-200 text-white","bg-pink-200 text-white"
+def get_user_color(user_id, variant="class"):
+    """Return a user's color as a Tabler class, HEX, or both."""
+    color_pairs = [
+        ("bg-blue-lt text-white", "#3b82f6"),
+        ("bg-green-lt text-white", "#22c55e"),
+        ("bg-orange-lt text-white", "#fb923c"),
+        ("bg-purple-lt text-white", "#8b5cf6"),
+        ("bg-pink-lt text-white", "#ec4899"),
+        ("bg-cyan-lt text-white", "#06b6d4"),
+        ("bg-yellow-lt text-white", "#eab308"),
+        ("bg-red-lt text-white", "#ef4444"),
+        ("bg-indigo-lt text-white", "#6366f1"),
+        ("bg-teal-lt text-white", "#14b8a6"),
+        ("bg-lime-lt text-white", "#84cc16"),
+        ("bg-amber-lt text-white", "#f59e0b"),
+        ("bg-fuchsia-lt text-white", "#d946ef"),
+        ("bg-emerald-lt text-white", "#10b981"),
+        ("bg-violet-lt text-white", "#8b5cf6"),
+        ("bg-rose-lt text-white", "#f43f5e"),
+        ("bg-sky-lt text-white", "#0ea5e9"),
+        ("bg-orange-200 text-white", "#fdba74"),
+        ("bg-purple-200 text-white", "#c4b5fd"),
+        ("bg-pink-200 text-white", "#f9a8d4"),
     ]
-    return colors[user_id % len(colors)]
+
+    color_class, hex_color = color_pairs[user_id % len(color_pairs)]
+
+    if variant == "hex":
+        return hex_color
+    elif variant == "both":
+        return {"class": color_class, "hex": hex_color}
+    return color_class  # default (Tabler class)
+
+
+
+import hashlib
+
+def get_team_color(team_id=None, team_name=None, variant="class"):
+    """
+    Return a team's color in one of three variants:
+      - 'class': Tabler color class (default)
+      - 'hex': HEX color value
+      - 'both': dict with {'class': <class>, 'hex': <hex>}
+
+    Deterministic based on team_id or team_name.
+    """
+
+    color_pairs = [
+        ("bg-blue-lt text-white", "#3b82f6"),
+        ("bg-green-lt text-white", "#22c55e"),
+        ("bg-orange-lt text-white", "#fb923c"),
+        ("bg-purple-lt text-white", "#8b5cf6"),
+        ("bg-pink-lt text-white", "#ec4899"),
+        ("bg-cyan-lt text-white", "#06b6d4"),
+        ("bg-yellow-lt text-white", "#eab308"),
+        ("bg-red-lt text-white", "#ef4444"),
+        ("bg-indigo-lt text-white", "#6366f1"),
+        ("bg-teal-lt text-white", "#14b8a6"),
+        ("bg-lime-lt text-white", "#84cc16"),
+        ("bg-amber-lt text-white", "#f59e0b"),
+        ("bg-fuchsia-lt text-white", "#d946ef"),
+        ("bg-emerald-lt text-white", "#10b981"),
+        ("bg-violet-lt text-white", "#8b5cf6"),
+        ("bg-rose-lt text-white", "#f43f5e"),
+        ("bg-sky-lt text-white", "#0ea5e9"),
+        ("bg-orange-200 text-white", "#fdba74"),
+        ("bg-purple-200 text-white", "#c4b5fd"),
+        ("bg-pink-200 text-white", "#f9a8d4"),
+    ]
+
+    base = str(team_id or team_name or "")
+    if not base:
+        if variant == "hex":
+            return "#0f172a"
+        elif variant == "both":
+            return {"class": "bg-dark text-white", "hex": "#0f172a"}
+        return "bg-dark text-white"
+
+    # Stable deterministic hash
+    digest = hashlib.md5(base.encode("utf-8")).hexdigest()
+    index = int(digest, 16) % len(color_pairs)
+    color_class, hex_color = color_pairs[index]
+
+    if variant == "hex":
+        return hex_color
+    elif variant == "both":
+        return {"class": color_class, "hex": hex_color}
+    return color_class  # default
+
+
 
 
 # ---------- Helper ----------
@@ -51,18 +128,37 @@ def handle_file_upload(file_url):
     return cleaned
 
 
-
 # =================== Chat Consumer ===================
 class ChatConsumer(AsyncWebsocketConsumer):
 
     # ---------- WebSocket Lifecycle ----------
     async def connect(self):
-        self.room_group_name = "group_chat"
+        from .models import Team
+        # Parse team from querystring, default = central
+        qs = self.scope.get("query_string", b"").decode()
+        params = urllib.parse.parse_qs(qs)
+        team_slug = params.get("team", [None])[0] or params.get("team_id", [None])[0]
+
+        self.team = None
+        self.room_group_name = "chat_central"
+
+        if team_slug:
+            # team provided could be id or slug/name — try id first
+            team = None
+            if team_slug.isdigit():
+                team = await sync_to_async(Team.objects.filter(id=int(team_slug)).first)()
+            if not team:
+                team = await sync_to_async(Team.objects.filter(name__iexact=team_slug).first)()
+
+            if team:
+                self.team = team
+                self.room_group_name = f"chat_team_{team.id}"
+
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
         # ✅ Send latest pinned previews on connect
-        recent = await self.get_recent_pinned()
+        recent = await self.get_recent_pinned(self.team)
         await self.send(text_data=json.dumps({
             "type": "pinned_preview",
             "messages": recent
@@ -77,7 +173,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if data.get("action"):
                 await self.handle_action(data)
             else:
-                await self.handle_new_message(data)
+                # Always attach the current connection’s team
+                team_id = self.team.id if self.team else None
+                await self.handle_new_message({**data, "team_id": team_id})
         except Exception as e:
             logger.error(f"WebSocket receive error: {e}")
 
@@ -114,7 +212,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
 
             # 🔹 2. Broadcast updated pinned preview stack
-            recent = await self.get_recent_pinned()
+            recent = await self.get_recent_pinned(self.team)
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -141,11 +239,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
         file_data = data.get("file") or {} # expect dict {url,name,size,type}
         file_url = file_data.get("url")
         link_preview = data.get("link_preview")
+        team_id = data.get("team_id")
 
         if not message.strip() and not guest_id and not file_url and not link_preview:
             return
 
-        saved_message = await self.create_message(sender_id, message, guest_id, parent_id, mentions_ids, file_url, link_preview)
+        saved_message = await self.create_message(sender_id, message, guest_id, parent_id, mentions_ids, file_url, link_preview, team_id)
         payload = {**saved_message, "type": "chat_message", "color": get_user_color(sender_id)}
         await self.channel_layer.group_send(self.room_group_name, payload)
 
@@ -242,7 +341,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # ---------- Helpers ----------
     @sync_to_async
-    def get_recent_pinned(self):
+    def get_recent_pinned(self, team=None):
         from .models import ChatMessage
         from .utils import serialize_message, build_mention_helpers
         cutoff = now() - timedelta(days=14)
@@ -252,11 +351,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             pinned=False, pinned_at=None, pinned_by=None
         )
 
-        pinned = (
-            ChatMessage.objects.filter(pinned=True, pinned_at__gte=cutoff)
-            .select_related("pinned_by", "sender", "guest_card")
-            .order_by("-pinned_at")[:3]
-        )
+        qs = ChatMessage.objects.filter(pinned=True, pinned_at__gte=cutoff)
+        if team:
+            qs = qs.filter(team=team)
+        else:
+            qs = qs.filter(team__isnull=True)
+
+        pinned = qs.select_related("pinned_by", "sender", "guest_card").order_by("-pinned_at")[:3]
         mention_map, mention_regex = build_mention_helpers()
         return [serialize_message(m, mention_map, mention_regex) for m in pinned]
 
@@ -279,9 +380,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def create_message(
         self, sender_id, message,
         guest_id=None, parent_id=None, mentions_ids=None,
-        file_url=None, link_preview=None
+        file_url=None, link_preview=None, team_id=None
     ):
-        from .models import ChatMessage, CustomUser
+        from .models import ChatMessage, Team
+        from accounts.models import CustomUser
         from guests.models import GuestEntry
         from .utils import serialize_message, build_mention_helpers, get_link_preview
         from django.core.files.storage import default_storage
@@ -292,7 +394,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         try:
             sender = CustomUser.objects.get(id=sender_id)
-            guest_card = GuestEntry.objects.filter(id=guest_id).first() if guest_id else None
+            team = Team.objects.filter(id=team_id).first() if team_id else None
+            # enforce: guest_card only allowed for Magnet team
+            guest_card = None
+            if guest_id:
+                candidate = GuestEntry.objects.filter(id=guest_id).first()
+                if candidate:
+                    if team and team.name.lower() == "magnet":
+                        guest_card = candidate
+                    else:
+                        # do not attach guest card if team is not Magnet
+                        guest_card = None
             parent = ChatMessage.objects.filter(id=parent_id).first() if parent_id else None
 
             # 🔎 detect link if not provided
@@ -312,6 +424,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # ✅ Save message with real FileField
             saved = ChatMessage.objects.create(
                 sender=sender,
+                team=team,
                 message=message or "",
                 guest_card=guest_card,
                 parent=parent,
@@ -332,22 +445,100 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return {}
 
 
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+from asgiref.sync import sync_to_async
+
+
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+from asgiref.sync import sync_to_async
+
+
 # consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+from asgiref.sync import sync_to_async
+
 
 class AttendanceConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        self.user = self.scope["user"]
+
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+
+        if not self.user.is_superuser:
+            self.user_team_ids = await self.get_user_team_ids()
+        else:
+            self.user_team_ids = []
+
+        # 👇 Group names renamed to avoid conflict
         await self.channel_layer.group_add("attendance", self.channel_name)
+        await self.channel_layer.group_add(f"attendance_user_{self.user.id}", self.channel_name)
+
         await self.accept()
+        print(f"✅ {self.user} connected to attendance groups")
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard("attendance", self.channel_name)
+        await self.channel_layer.group_discard(f"attendance_user_{self.user.id}", self.channel_name)
 
+    # -------------------------------------------------------
+    # UTILITIES
+    # -------------------------------------------------------
+    @sync_to_async
+    def get_user_team_ids(self):
+        from accounts.models import TeamMembership
+        return list(
+            TeamMembership.objects.filter(user=self.user)
+            .values_list("team_id", flat=True)
+        )
+
+    # -------------------------------------------------------
+    # EVENT HANDLERS
+    # -------------------------------------------------------
     async def send_event(self, event):
-        await self.send(text_data=json.dumps(event["data"]))
+        """Handle attendance event updates (for the 'attendance' group)."""
+        data = event.get("data", {})
+        team_id = data.get("team_id")
 
-    async def send_summary(self, summary):
-        await self.send(text_data=json.dumps(summary["data"]))
+        if (
+            self.user.is_superuser
+            or team_id is None
+            or team_id in self.user_team_ids
+        ):
+            await self.send(text_data=json.dumps(data))
 
+    async def send_summary(self, event):
+        """Handles messages sent with type='send_summary'."""
+        records = event.get("data", {}).get("records", [])
 
+        # 🔹 Safely handle nested user dicts
+        if not self.user.is_superuser:
+            records = [
+                r for r in records
+                if (
+                    (r["event"]["team"]["id"] in self.user_team_ids or r["event"]["team"]["id"] is None)
+                    and not str(r.get("user", {}).get("full_name", "")).lower().startswith("superuser")
+                )
+            ]
+
+        await self.send(text_data=json.dumps({
+            "type": "send_summary",
+            "records": records
+        }))
+
+    async def dashboard_summary(self, event):
+        """Handles per-user dashboard summary updates."""
+        data = event.get("data", {})
+        user_id = data.get("user_id")
+
+        if user_id == self.user.id:
+            await self.send(text_data=json.dumps({
+                "type": "dashboard_summary",
+                "summary": data.get("summary"),
+                "today": data.get("today"),
+                "totals": data.get("totals"),
+            }))

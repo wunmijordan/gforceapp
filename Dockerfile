@@ -58,4 +58,4 @@ RUN python manage.py migrate
 # =========================
 # Stage 5: Expose Port & Start Gunicorn
 # =========================
-#CMD ["sh", "-c", "gunicorn gatewaymagnetapp.wsgi:application --bind 0.0.0.0:$PORT --workers=4 --threads=2 --timeout=120"]
+#CMD ["sh", "-c", "gunicorn gforceapp.wsgi:application --bind 0.0.0.0:$PORT --workers=4 --threads=2 --timeout=120"]

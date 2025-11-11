@@ -19,7 +19,7 @@ def get_local_ip():
     return IP
 
 def main():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gatewaymagnetapp.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gforceapp.settings')
     
     # Print the mobile-friendly clickable link before running the server
     local_ip = get_local_ip()

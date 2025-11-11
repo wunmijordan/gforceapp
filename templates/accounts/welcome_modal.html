@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load guest_extras %}
 {% load static %}
-{% load group_tags %}
+{% load access_tags %}
 {% load humanize %}
 {% block title %}Guest List - Gateway Magnet{% endblock %}
 
@@ -71,7 +71,7 @@
       clearInterval(timer);
 
       // 👇 Trigger attendance check before redirect
-      fetch("/accounts/attendance/recent/", { headers: { "X-Requested-With": "XMLHttpRequest" } })
+      fetch("/workforce/attendance/recent/", { headers: { "X-Requested-With": "XMLHttpRequest" } })
         .then(res => res.json())
         .then(data => {
           if (data.event && data.event.id) {
