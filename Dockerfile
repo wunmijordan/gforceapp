@@ -53,6 +53,15 @@ ENV CLOUDINARY_API_SECRET=your_api_secret
 
 # Collect static files and run migrations
 RUN python manage.py collectstatic --noinput
+
+# Fake the problematic migrations for accounts (0029–0035)
+RUN python manage.py migrate accounts 0029 --fake
+RUN python manage.py migrate accounts 0030 --fake
+RUN python manage.py migrate accounts 0031 --fake
+RUN python manage.py migrate accounts 0032 --fake
+RUN python manage.py migrate accounts 0033 --fake
+RUN python manage.py migrate accounts 0034 --fake
+RUN python manage.py migrate accounts 0035 --fake
 RUN python manage.py migrate
 
 # =========================
