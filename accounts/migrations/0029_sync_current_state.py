@@ -13,38 +13,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='chatmessage',
-            name='guest_card',
-        ),
-        migrations.RemoveField(
-            model_name='chatmessage',
-            name='parent',
-        ),
-        migrations.RemoveField(
-            model_name='chatmessage',
-            name='pinned_by',
-        ),
-        migrations.RemoveField(
-            model_name='chatmessage',
-            name='seen_by',
-        ),
-        migrations.RemoveField(
-            model_name='chatmessage',
-            name='sender',
-        ),
-        migrations.RemoveField(
-            model_name='event',
-            name='created_by',
-        ),
-        migrations.RemoveField(
-            model_name='personalreminder',
-            name='user',
-        ),
-        migrations.RemoveField(
-            model_name='useractivity',
-            name='user',
-        ),
         migrations.AddField(
             model_name='customuser',
             name='last_active',
