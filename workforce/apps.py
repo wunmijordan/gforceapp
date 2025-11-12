@@ -27,6 +27,17 @@ class WorkforceConfig(AppConfig):
 
         post_migrate.connect(create_default_teams, sender=self)
 
+        # Also run immediately if DB is ready and no teams exist yet
+        try:
+            from django.db import connections
+            from django.db.utils import OperationalError
+            connections['default'].ensure_connection()
+            from workforce.models import Team
+            if not Team.objects.exists():
+                create_default_teams(None)
+        except OperationalError:
+            pass
+
         # ---- 2️⃣ Safe scheduler startup ----
         def safe_start_scheduler():
             """Wait until DB is ready before starting scheduler (esp. on cold boot)."""
