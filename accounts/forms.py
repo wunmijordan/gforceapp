@@ -146,12 +146,17 @@ class CustomUserCreationForm(forms.ModelForm):
             for f in ['is_staff', 'is_superuser']:
                 self.fields.pop(f, None)
 
-        # --- Ensure core project roles exist ---
         project_roles = ["Pastor", "Minister", "Admin", "GForce Member"]
+
+        # Only superusers can assign 'Superuser'
+        if self.current_user and self.current_user.is_superuser:
+            project_roles.append("Superuser")
+
+        # Ensure all these groups exist in DB
         for role_name in project_roles:
             Group.objects.get_or_create(name=role_name)
 
-        # Only show project-level roles (exclude Superuser + legacy)
+        # Limit the group field queryset
         self.fields['group'].queryset = Group.objects.filter(
             name__in=project_roles
         ).order_by('name')
@@ -266,12 +271,17 @@ class CustomUserChangeForm(forms.ModelForm):
             for f in ['is_staff', 'is_superuser']:
                 self.fields.pop(f, None)
 
-        # --- Ensure project-level roles exist ---
         project_roles = ["Pastor", "Minister", "Admin", "GForce Member"]
+
+        # Only superusers can assign 'Superuser'
+        if self.current_user and self.current_user.is_superuser:
+            project_roles.append("Superuser")
+
+        # Ensure all these groups exist in DB
         for role_name in project_roles:
             Group.objects.get_or_create(name=role_name)
 
-        # --- Limit group queryset to only those roles (exclude Superuser + legacy) ---
+        # Limit the group field queryset
         self.fields['group'].queryset = Group.objects.filter(
             name__in=project_roles
         ).order_by('name')
