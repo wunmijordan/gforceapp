@@ -968,32 +968,28 @@
           
           <!-- Team Selection -->
           <div id="teamSelectionRow" class="d-flex flex-wrap gap-2 mb-3 justify-content-center">
-            {% with memberships=user.team_memberships.all %}
-              <!-- GForce (General events) -->
-              <button type="button"
-                      class="btn px-3 py-2 team-btn text-warning border-0"
-                      data-team-id="null"
-                      style="border-radius: 12px; background: #111827; box-shadow: 0 4px 8px #000000d2;">
-                GForce
-              </button>
+            <!-- GForce (General events) -->
+            <button type="button"
+                    class="btn px-3 py-2 team-btn text-warning border-0"
+                    data-team-id="null"
+                    style="border-radius: 12px; background: #111827; box-shadow: 0 4px 8px #000000d2;">
+              GForce
+            </button>
 
-              {% if memberships %}
-                {% for membership in memberships %}
-                  {% if membership.team.is_active %}
-                    <button type="button"
-                            class="btn px-3 py-2 team-btn text-white border-0 {{ membership.team.color_class }}"
-                            data-team-id="{{ membership.team.id }}"
-                            style="
-                              border-radius: 12px;
-                              background-color: #1f2937;
-                              box-shadow: 0 4px 8px #000000d2;
-                            ">
-                      {{ membership.team.name }}
-                    </button>
-                  {% endif %}
-                {% endfor %}
+            {% for team in available_teams %}
+              {% if team.is_active %}
+                <button type="button"
+                        class="btn px-3 py-2 team-btn text-white border-0 {{ team.color_class }}"
+                        data-team-id="{{ team.id }}"
+                        style="
+                          border-radius: 12px;
+                          background-color: #1f2937;
+                          box-shadow: 0 4px 8px #000000d2;
+                        ">
+                  {{ team.name }}
+                </button>
               {% endif %}
-            {% endwith %}
+            {% endfor %}
           </div>
 
           <!-- Hidden Event Carousel -->

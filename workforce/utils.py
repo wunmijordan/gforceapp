@@ -402,6 +402,17 @@ def get_available_events_for_user(user):
     return available_events
 
 
+def get_available_teams_for_user(user):
+    """
+    Returns active teams the user can select in modals:
+    - Superusers / Project admins see all active teams.
+    - Regular users see only teams they belong to.
+    """
+    if is_project_admin(user):
+        return Team.objects.filter(is_active=True).order_by("name")
+    return Team.objects.filter(memberships__user=user, is_active=True).distinct().order_by("name")
+
+
 def expand_team_events(user, team_id):
 
     today = timezone.localdate()

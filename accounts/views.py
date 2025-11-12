@@ -38,7 +38,14 @@ from urllib.parse import urlparse
 from django.core.files.storage import default_storage
 import urllib.parse
 from django.conf import settings
-from workforce.utils import get_calendar_items, get_available_events_for_user, expand_team_events, get_visible_attendance_records, get_visible_clock_records
+from workforce.utils import (
+    get_calendar_items,
+    get_available_events_for_user,
+    get_available_teams_for_user,
+    expand_team_events,
+    get_visible_attendance_records,
+    get_visible_clock_records,
+)
 from workforce.models import AttendanceRecord, Team, ClockRecord
 from collections import defaultdict
 from django.utils import timezone
@@ -393,16 +400,31 @@ def admin_dashboard(request):
     upcoming_events.sort(key=lambda e: e["date"])
 
     # === Next available events for the week ===
+    user_team_ids = [t.id for t in user_teams]
+
+    # Detect if user is a global role
+    user_is_global = request.user.is_superuser or request.user.groups.filter(
+        name__in=["Pastor", "Admin"]
+    ).exists()
+
     start_of_week = today - timedelta(days=today.weekday())  # Monday start
     start_of_sunday = start_of_week - timedelta(days=1)      # Adjust to Sunday start
     end_of_week = start_of_sunday + timedelta(days=7)        # Sunday → Sunday window
 
-    # Filter the user's events for this week (including GForce)
-    weekly_events = [
-        e for e in upcoming_events
-        if start_of_sunday <= e["date"] <= end_of_week
-        and (e.get("team_id") in [t.id for t in user_teams] or e.get("team_id") is None)
-    ]
+    # ✅ Filter events based on access level
+    if user_is_global:
+        # Superuser / Pastor / Admin → see all events this week
+        weekly_events = [
+            e for e in upcoming_events
+            if start_of_sunday <= e["date"] <= end_of_week
+        ]
+    else:
+        # Regular members → see their team + GForce events
+        weekly_events = [
+            e for e in upcoming_events
+            if start_of_sunday <= e["date"] <= end_of_week
+            and (e.get("team_id") in user_team_ids or e.get("team_id") is None)
+        ]
 
     weekly_events.sort(key=lambda e: (e["date"], e.get("time", "")))
     # ✅ Add full ISO datetime for countdowns
@@ -459,6 +481,7 @@ def admin_dashboard(request):
         'today_clock_in': getattr(today_record, 'clock_in', None),
         'today_clock_out': getattr(today_record, 'clock_out', None),
         'available_events': upcoming_events,
+        'available_teams': get_available_teams_for_user(request.user),
         'next_events_for_week': next_events,
         'context_user_permissions': json.dumps({
             'is_project_admin': is_project_admin(request.user),
