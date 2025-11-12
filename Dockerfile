@@ -51,26 +51,9 @@ ENV CLOUDINARY_CLOUD_NAME=your_cloud_name
 ENV CLOUDINARY_API_KEY=your_api_key
 ENV CLOUDINARY_API_SECRET=your_api_secret
 
-# Collect static files first
+# Collect static files and run migrations
 RUN python manage.py collectstatic --noinput
-
-# Step 1: Apply base migrations (auth, contenttypes, admin)
-RUN python manage.py migrate contenttypes --noinput
-RUN python manage.py migrate auth --noinput
-RUN python manage.py migrate admin --noinput
-RUN python manage.py migrate sessions --noinput
-
-# Step 2: Fake your problematic accounts migrations (0029–0035)
-RUN python manage.py migrate accounts 0029 --fake
-RUN python manage.py migrate accounts 0030 --fake
-RUN python manage.py migrate accounts 0031 --fake
-RUN python manage.py migrate accounts 0032 --fake
-RUN python manage.py migrate accounts 0033 --fake
-RUN python manage.py migrate accounts 0034 --fake
-RUN python manage.py migrate accounts 0035 --fake
-
-# Step 3: Run normal migrations for all apps
-RUN python manage.py migrate --noinput
+RUN python manage.py migrate
 
 # =========================
 # Stage 5: Expose Port & Start Gunicorn
