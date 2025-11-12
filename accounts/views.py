@@ -646,7 +646,7 @@ def manage_user(request, user_id=None):
                 if "save_return" in request.POST:
                     return redirect("accounts:user_list")
                 elif "save_add_another" in request.POST:
-                    return redirect("accounts:manage_user")
+                    return redirect("accounts:create_user")
             else:
                 messages.error(request, "Please correct the errors below.")
 
