@@ -496,14 +496,19 @@ def notify_team_on_event_create(sender, instance, created, **kwargs):
 
     event = instance
     creator = event.created_by
-    event_datetime = event.date
-    if isinstance(event_datetime, date) and not isinstance(event_datetime, datetime):
-        event_time = getattr(event, "time", time.min)
-        event_datetime = datetime.combine(event_datetime, event_time)
-    if timezone.is_naive(event_datetime):
-        event_datetime = timezone.make_aware(event_datetime, timezone.get_current_timezone())
+    # --- Determine timestamp string ---
+    if event.is_recurring_weekly:
+        ts = f"Every {event.get_day_of_week_display()}"  # e.g., "Every Sunday"
+    elif event.date:
+        event_datetime = datetime.combine(event.date, event.time or time.min) \
+            if isinstance(event.date, date) and not isinstance(event.date, datetime) else event.date
 
-    ts = timezone.localtime(event_datetime).strftime("%b. %d, %Y — %H:%M")
+        if timezone.is_naive(event_datetime):
+            event_datetime = timezone.make_aware(event_datetime, timezone.get_current_timezone())
+
+        ts = timezone.localtime(event_datetime).strftime("%b. %d, %Y — %H:%M")
+    else:
+        ts = "TBD"
     team = getattr(event, "team", None)
     team_name = team.name if team else "GForce"
 
