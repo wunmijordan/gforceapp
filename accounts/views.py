@@ -312,9 +312,12 @@ def admin_dashboard(request):
     user_teams = Team.objects.filter(memberships__user=request.user).distinct()
 
     # Fetch other users who belong to any of those same teams
-    other_users = CustomUser.objects.filter(
-        team_memberships__team__in=user_teams
-    ).exclude(id=request.user.id).distinct()
+    if request.user.is_superuser:
+        other_users = CustomUser.objects.exclude(id=request.user.id)
+    else:
+        other_users = CustomUser.objects.filter(
+            team_memberships__team__in=user_teams
+        ).exclude(id=request.user.id).distinct()
 
     # Exclude project-level admins
     other_users = [u for u in other_users if not is_project_admin(u)]

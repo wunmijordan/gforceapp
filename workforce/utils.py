@@ -372,15 +372,22 @@ def get_available_events_for_user(user):
     start_of_year = date(today.year, 1, 1)
     end_of_year = date(today.year, 12, 31)
 
-    # Filter events for user's teams or global ones
-    events = Event.objects.filter(
-        is_active=True
-    ).filter(
-        Q(team__isnull=True) | Q(team__memberships__user=user)
-    ).filter(
-        Q(date__isnull=False, date__lte=end_of_year) |
-        Q(is_recurring_weekly=True)
-    )
+    # If superuser or project-level admin, return all active events
+    if is_project_admin(user):
+        events = Event.objects.filter(is_active=True).filter(
+            Q(date__isnull=False, date__lte=end_of_year) |
+            Q(is_recurring_weekly=True)
+        )
+    else:
+        # Filter events for user's teams or global ones
+        events = Event.objects.filter(
+            is_active=True
+        ).filter(
+            Q(team__isnull=True) | Q(team__memberships__user=user)
+        ).filter(
+            Q(date__isnull=False, date__lte=end_of_year) |
+            Q(is_recurring_weekly=True)
+        )
 
     available_events = []
     for e in events:

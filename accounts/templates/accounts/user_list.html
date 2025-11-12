@@ -314,22 +314,35 @@
                   {% endif %}
                 </div>
 
-                {% with memberships=user.team_memberships.all %}
-                  {% if memberships %}
-                    <div class="user-team-role text-center mt-2">
-                      <div class="team-role-container position-relative overflow-hidden d-inline-block px-1 py-0 rounded-pill bg-dark-lt"
-                          data-user="{{ user.id }}">
-                        {% for m in memberships %}
-                          <div class="team-role-item {{ m.team.color_class|default:'bg-dark-lt' }} text-white fw-semibold px-1 py-1
-                                      {% if not forloop.first %}d-none{% endif %}">
-                            {{ m.team.name }} — 
-                            <span class="fst-italic text-muted">{{ m.team_role }}</span>
-                          </div>
-                        {% endfor %}
+                {% if user|is_project_admin %}
+                  <div class="user-team-role text-center mt-2">
+                    <div class="team-role-container position-relative overflow-hidden d-inline-block px-1 py-0 rounded-pill bg-dark-lt"
+                        data-user="{{ user.id }}">
+                      <div class="team-role-item bg-dark text-white fw-semibold px-2 py-1 rounded-pill">
+                        All Teams
                       </div>
                     </div>
-                  {% endif %}
-                {% endwith %}
+                  </div>
+                {% else %}
+                  {% with memberships=user.team_memberships.all %}
+                    {% if memberships %}
+                      <div class="user-team-role text-center mt-2">
+                        <div class="team-role-container position-relative overflow-hidden d-inline-block px-1 py-0 rounded-pill bg-dark-lt"
+                            data-user="{{ user.id }}">
+                          {% for m in memberships %}
+                            {% if m.team_role and m.team_role not in "Superuser,Pastor,Admin" %}
+                              <div class="team-role-item {{ m.team.color_class|default:'bg-dark-lt' }} text-white fw-semibold px-1 py-1
+                                          {% if not forloop.first %}d-none{% endif %}">
+                                {{ m.team.name }} — 
+                                <span class="fst-italic text-muted">{{ m.team_role }}</span>
+                              </div>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
 
                 <!-- Guest Count (Magnet Members Only) -->
                 {% if user|in_team:"Magnet" %}

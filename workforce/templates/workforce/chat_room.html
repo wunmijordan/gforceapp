@@ -4,7 +4,7 @@
 {% load humanize %}
 {% block content %}
 
-<div class="page-wrapper chat-wrapper" style="display:flex; flex-direction:column; height:100vh; overflow:hidden;">
+<div class="page-wrapper chat-wrapper" style="display:flex; flex-direction:column; height:100dvh; overflow:hidden;">
 
   <header class="navbar-chat scrolled navbar-expand-md d-md-none d-print-none">
     <div class="container-fluid">
@@ -553,7 +553,7 @@
 
             {% if not request.user|has_group:"Demo" or request.user.is_superuser %} 
               <!-- Message Input --> 
-              <div class="card-footer border-0 position-relative"> 
+              <div class="card-footer border-0"> 
                 
                 <div class="input-group input-group-flat border-0 d-flex flex-column p-2"
                     style="box-shadow: 0 4px 8px #000000d2; border-radius: 1rem; background: #0c1420;">
@@ -674,7 +674,7 @@ const USER_PERMS = JSON.parse('{{ context_user_permissions|escapejs }}');
 document.addEventListener("DOMContentLoaded", () => {
   const chatContainer = document.getElementById("chatMessagesContainer");
   const stickyDateHeader = document.getElementById("stickyDateHeader");
-  const chatInput = document.getElementById("chatInput");
+  const chatInput = document.getElementById("chatInput") || document.querySelector(".chat-wrapper .card-footer");
   const sendButton = document.getElementById("sendButton");
   const replyPreview = document.getElementById("replyPreview");
   const replyPreviewText = document.getElementById("replyPreviewText");
@@ -711,6 +711,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const userRole = (CURRENT_USER_ROLE || "").toLowerCase();
   const isMagnetUser = userRole.includes("magnet");
   const isProjectWideAdmin = USER_PERMS.is_project_wide_admin === true;
+
+  // Use existing DOM container with id="pinnedPreview" if present
+  const pinnedPreviewContainer = document.getElementById('pinnedPreview') || document.querySelector('.pinned-preview');
 
   document.querySelectorAll(".chat-back-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1574,9 +1577,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 
-
-  // Use existing DOM container with id="pinnedPreview" if present
-  const pinnedPreviewContainer = document.getElementById('pinnedPreview') || document.querySelector('.pinned-preview');
 
   // Render the pinned preview stack
   function renderPinnedPreview() {
@@ -3766,6 +3766,38 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   });
+
+  const chatWrapper = document.querySelector(".chat-wrapper");
+  const chatBody = document.querySelector(".chat-card .card-body");
+
+  // Set initial --vh value for modern browsers
+  function setViewportHeight() {
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty("--vh", `${vh * 0.01}px`);
+  }
+
+  // Initialize
+  setViewportHeight();
+
+  // Update when viewport changes (e.g., keyboard opens)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", setViewportHeight);
+  } else {
+    window.addEventListener("resize", setViewportHeight);
+  }
+
+  // Optional: scroll to input on focus for mobile keyboard visibility
+  if (chatInput) {
+    const textarea = chatInput.querySelector("textarea");
+    if (textarea) {
+      textarea.addEventListener("focus", () => {
+        setTimeout(() => {
+          textarea.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 300);
+      });
+    }
+  }
+
 
 
 });

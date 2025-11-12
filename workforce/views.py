@@ -59,18 +59,17 @@ def chat_room(request):
         .order_by("name")
     )
 
-    # If the user is a Pastor (but not superuser), ensure they're in all teams
-    if user_in_groups(request.user, "Pastor,Admin") and not request.user.is_superuser:
-        for team in teams:
-            TeamMembership.objects.get_or_create(
-                user=request.user,
-                team=team,
-                defaults={"team_role": "Pastor,Admin"}
-            )
+    # ✅ Superuser: see all teams, no auto-membership creation
+    if user.is_superuser:
+        pass
 
-    # For non-Pastor users, show only teams they belong to
-    if not user_in_groups(request.user, "Pastor,Admin") and not request.user.is_superuser:
-        teams = [team for team in teams if user_in_team(request.user, team.name)]
+    # ✅ Pastors/Admins: see all teams but don’t persist "Pastor,Admin" roles
+    elif is_project_admin(user) and not user.is_superuser:
+        pass  # they see all, but no membership auto-creation
+
+    # ✅ Regular users: show only their assigned teams
+    else:
+        teams = [team for team in teams if user_in_team(user, team.name)]
 
 
     # selected team (team_id in GET), default = None meaning central
