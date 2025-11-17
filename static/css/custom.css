@@ -70,7 +70,7 @@
   display: flex;
   align-items: center;
   border: none !important;
-  box-shadow: none !important;
+  box-shadow: 0 1px 2px #000000;
   padding: 0.5rem 0.5rem;   /* keep inner spacing instead of margin */
 }
 
@@ -79,14 +79,14 @@
   top: 0;
   left: 0;
   right: 0;               /* makes centering easier */
-  width: 95%;             /* or max-width if you want it tighter */
-  max-width: 1200px;      /* keeps consistent size on wide screens */
+  width: 97%;             /* or max-width if you want it tighter */
+  max-width: 1300px;      /* keeps consistent size on wide screens */
   margin: 0 auto;         /* centers horizontally */  
   background: #0c1420 !important;
-  border-radius: 2rem;
+  border-radius: 0 0 2rem 2rem;
   box-shadow: 0 6px 10px #000000ea;
   transition: all 0.2s ease-in-out;
-  padding: 0.25rem 1rem;        /* even padding left & right */
+  padding: 0.5rem 0.75rem;        /* even padding left & right */
   animation: slideDown 0.2s ease forwards;
   z-index: 1030;
 }
@@ -614,7 +614,7 @@
 /* Fixed overlay at the left edge of the marquee */
 .team-name-overlay {
   position: absolute;
-  left: 0;
+  left: 5px;
   top: 70%;
   transform: translateY(-50%);
   z-index: 20; /* above the marquee track */
@@ -1401,11 +1401,11 @@
     top: 0;
     left: 0;
     right: 0;               /* makes centering easier */
-    width: 95%;             /* or max-width if you want it tighter */
-    max-width: 1200px;      /* keeps consistent size on wide screens */
+    width: 97%;             /* or max-width if you want it tighter */
+    max-width: 1300px;      /* keeps consistent size on wide screens */
     margin: 0 auto;         /* centers horizontally */  
     background: #0c1420 !important;
-    border-radius: 2rem;
+    border-radius: 0 0 2rem 2rem;
     box-shadow: 0 6px 10px #000000ea;
     transition: all 0.2s ease-in-out;
     padding: 0.25rem 0.2rem;        /* even padding left & right */
@@ -1523,7 +1523,7 @@
     margin-bottom: 0;
     background: #111827 !important;
     box-shadow: 0 4px 8px #000000d2;
-    border-radius: 1rem;
+    border-radius: 2rem 2rem 0 0;
     overflow: hidden;
   }
 
@@ -1532,6 +1532,7 @@
     flex-direction: column;
     flex: 1 1 auto;
     overflow: hidden;
+    border-radius: 2rem 2rem 0 0;
   }
 
   #chatMessagesContainer {

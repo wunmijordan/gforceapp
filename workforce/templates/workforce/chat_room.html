@@ -47,23 +47,11 @@
                 style="
                   box-shadow: 0 4px 8px #000000d2;
                   height: 48px;             /* tall enough for icons */
-                  padding-left: 48px;       /* space for logo */
-                  padding-right: 40px;      /* space for avatar */
+                  padding: 0 20px;       /* space for logo + avatar */
                   width: 200px;
                 ">
 
-          <!-- Logo inside input (left) -->
-          <span class="position-absolute top-50 start-0 translate-middle-y ps-3 me-2">
-            {% if request.user|is_project_wide_admin %}
-              <a href="{% url 'accounts:admin_dashboard' %}">
-                <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="32" height="32">
-              </a>
-            {% else %}
-              <a href="{% url 'dashboard' %}">
-                <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="32" height="32">
-              </a>
-            {% endif %}
-          </span>
+          
 
           <!-- Avatar / SVG inside input (right) 
           <span class="position-absolute top-50 end-0 translate-middle-y pe-2 me-2">
@@ -216,17 +204,45 @@
       <!-- Mobile Navbar menu: scrollable -->
       <div class="navbar-collapse collapse" id="navbar-menu" style="max-height:50vh; overflow-y:auto;">
         <ul class="navbar-nav">
+          <!-- Logo inside input (left) -->
+          <li class="nav-item align-items-center m-0 p-0">
+            {% if request.user|is_project_wide_admin %}
+              <a class="nav-link text-white" href="{% url 'accounts:admin_dashboard' %}">
+                <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                    <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                    <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                    <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                  </svg>
+                </span>
+                <span class="nav-link-title"> Dashboard </span>
+              </a>
+            {% else %}
+              <a class="nav-link text-white" href="{% url 'dashboard' %}">
+                <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                    <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                    <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                    <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                  </svg>
+                </span>
+                <span class="nav-link-title"> Dashboard </span>
+              </a>
+            {% endif %}
+          </li>
           <!-- Team Buttons Strip -->
-          <div id="teamSelector" class="team-selector d-flex flex-column gap-1 mb-3">
-            {% for team in teams %}
-              <button class="team-btn fw-bold text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
-                      data-team-id="{{ team.id }}"
-                      data-team-color-class="{{ team.color_class }}"
-                      data-team-name="{{ team.name }}">
-                <i class="ti ti-users me-2"></i>{{ team.name }}
-              </button>
-            {% endfor %}
-          </div>
+          <li class="nav-item mt-2">
+            <div id="teamSelector" class="team-selector d-flex flex-column gap-1 mb-3">
+              {% for team in teams %}
+                <button class="team-btn fw-bold text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
+                        data-team-id="{{ team.id }}"
+                        data-team-color-class="{{ team.color_class }}"
+                        data-team-name="{{ team.name }}">
+                  <i class="ti ti-users me-2"></i>{{ team.name }}
+                </button>
+              {% endfor %}
+            </div>
+          </li>
         </ul>
       </div>
     </div>
@@ -1034,20 +1050,20 @@ document.addEventListener("DOMContentLoaded", () => {
   .chat-room-banner {
     position: sticky;
     top: 0;
-    left: 1.5px;
+    left: 15px;
     z-index: 10;
     background: #111827;
     color: #f59f00;
     font-size: 0.8rem;
     font-weight: 800;
-    padding: 3px 10px;
-    border-radius: 20px;
+    padding: 3px 6px;
+    border-radius: 2rem;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.76);
     display: flex;
     align-items: center;
     justify-content: flex-start;
     overflow: hidden;
-    max-width: 120px;
+    max-width: 100px;
     min-height: 28px;
   }
 

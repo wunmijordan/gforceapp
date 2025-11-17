@@ -760,7 +760,7 @@ def guest_detail_api(request, guest_id):
 
 
 
-@user_passes_test(lambda u: user_in_groups(u, "Pastor,Team Lead,Registrant,Admin,Demo"))
+@user_passes_test(lambda u: is_magnet_admin(u))
 
 @login_required
 def create_guest(request):
@@ -1018,7 +1018,7 @@ def bulk_delete_guests(request):
 # Reassign guest
 # -------------------------
 @login_required
-@user_passes_test(lambda u: user_in_groups(u, "Pastor,Team Lead,Admin"))
+@user_passes_test(lambda u: is_magnet_admin(u))
 def reassign_guest(request, guest_id):
     guest = get_object_or_404(GuestEntry, id=guest_id)
 
@@ -1371,7 +1371,7 @@ def export_guests_pdf(request):
 
 
 @login_required
-@user_passes_test(lambda u: user_in_groups(u, "Pastor,Team Lead,Admin"))  # Only staff users can import
+@user_passes_test(lambda u: is_magnet_admin(u))  # Only staff users can import
 def import_guests_excel(request):
     if request.method == "POST":
         file = request.FILES.get("excel_file")

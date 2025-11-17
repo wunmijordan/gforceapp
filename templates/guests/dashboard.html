@@ -22,7 +22,7 @@
         <div class="col-auto ms-auto d-print-none">
           <div class="btn-list">
             
-            {% if request.user|has_group:"Pastor,Team Lead,Admin,Registrant,Demo" %}
+            {% if request.user|is_magnet_admin %}
               <div>
                 <!-- Single Button for Regular Users -->
                 <a href="{% url 'create_guest' %}" class="btn btn-gray d-none d-sm-inline-block">
