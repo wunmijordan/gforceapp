@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener("load", async () => {
       try {
         // Register SW
-        const swRegistration = await navigator.serviceWorker.register("/static/js/sw.js");
+        const swRegistration = await navigator.serviceWorker.register("/sw.js");
         console.log("Service Worker registered:", swRegistration);
 
         // Request notification permission

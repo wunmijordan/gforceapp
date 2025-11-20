@@ -82,7 +82,7 @@
   width: 97%;             /* or max-width if you want it tighter */
   max-width: 1300px;      /* keeps consistent size on wide screens */
   margin: 0 auto;         /* centers horizontally */  
-  background: #0c1420 !important;
+  background: #1f2937 !important;
   border-radius: 0 0 2rem 2rem;
   box-shadow: 0 6px 10px #000000ea;
   transition: all 0.2s ease-in-out;
@@ -1070,12 +1070,12 @@
 
 .team-selector .team-btn {
   border: none;
-  border-radius: 10px;
+  border-radius: 14px;
   color: #fff;
   padding: 8px 10px;
   gap: 2px;
-  font-size: 1.2rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
   transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.25s ease;
   box-shadow: 0 0 0 #000000d2;
@@ -1092,6 +1092,20 @@
   opacity: 0.95;
   background: #f59f0080;
 }
+
+/* Default: show inactive icon, hide active icon */
+.team-icon-active {
+  display: none;
+}
+
+.active-team .team-icon-inactive {
+  display: none;
+}
+
+.active-team .team-icon-active {
+  display: inline-block;
+}
+
 
 /* ================== TEAM USER STRIP WRAPPER ================== */
 #activeUserListWrapper {
@@ -1404,7 +1418,7 @@
     width: 97%;             /* or max-width if you want it tighter */
     max-width: 1300px;      /* keeps consistent size on wide screens */
     margin: 0 auto;         /* centers horizontally */  
-    background: #0c1420 !important;
+    background: #1f2937 !important;
     border-radius: 0 0 2rem 2rem;
     box-shadow: 0 6px 10px #000000ea;
     transition: all 0.2s ease-in-out;
@@ -1502,7 +1516,7 @@
     padding: 0 0;
     width: 95%;
     margin: 0.25rem auto;
-    background: rgba(17, 34, 51, 0.082)937 !important;
+    background: #111827 !important;
     box-shadow: 0 6px 10px #000000ea;
     border-radius: 1rem;
     flex-shrink: 0;
@@ -1521,9 +1535,9 @@
     height: 100%;
     margin: 0 0.5rem;
     margin-bottom: 0;
-    background: #111827 !important;
+    background: #1f2937;
     box-shadow: 0 4px 8px #000000d2;
-    border-radius: 2rem 2rem 0 0;
+    border-radius: 2rem 2rem 0 0 !important;
     overflow: hidden;
   }
 
@@ -1532,7 +1546,7 @@
     flex-direction: column;
     flex: 1 1 auto;
     overflow: hidden;
-    border-radius: 2rem 2rem 0 0;
+    border-radius: 2rem 2rem 0 0 !important;
   }
 
   #chatMessagesContainer {
@@ -1544,21 +1558,32 @@
   }
 }
 
+.chat-card {
+  border-radius: 2rem;
+}
+
+.chat-wrapper .chat-column .card-footer {
+  border-radius: 2rem !important;
+}
+
 .chat-bubble {
-    background-color: #0c121f !important;
-  }
+  background-color: #0c121f !important;
+  border-radius: 1.5rem 1.5rem 1.5rem 0;
+}
 
-  .chat-bubble-me {
-    background-color: #1c3536 !important;
-  }
+.chat-bubble-me {
+  background-color: #1c3536 !important;
+  border-radius: 1.5rem 1.5rem 0 1.5rem;
+}
 
+/* Watermark logo in chat background */
 .chat-wrapper .chat-column .card-body::before {
   content: "";
   position: absolute;
   top: 80px; left: 0; right: 0; bottom: 2rem;
   background: url('/static/images/church_logo.png') no-repeat center;
   background-size: 350px;
-  opacity: 0.09; /* faint watermark */
+  opacity: 0.5; /* faint watermark */
   pointer-events: none; /* don’t block clicks/scroll */
   z-index: 0;
 }
@@ -1588,8 +1613,8 @@
 /* Outer card wrapping pinner + preview bubble */
 .pinned-outer {
   position: relative;
-  background-color: #1f2937; /* dark grey bg */
-  border-radius: 10px;
+  background-color: #111827; /* dark grey bg */
+  border-radius: 14px;
   padding: 4px 7px;
   color: #fff;
   font-size: 0.6rem;
@@ -1614,8 +1639,9 @@
 
 /* Pinner label */
 .pinned-outer .pinner {
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: 0.65rem;
+  font-style: italic;
+  font-weight: 400;
   color: #fbbf24;
   margin-bottom: 6px;
   padding: 0 0;
@@ -1625,7 +1651,7 @@
 .pinned-outer .pinned-info {
   background-color: #25292634;
   border-left: 4px solid rgba(247, 3, 215, 0.527);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 3px 8px;
   font-size: 0.6rem;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);

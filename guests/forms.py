@@ -14,7 +14,8 @@ class GuestEntryForm(forms.ModelForm):
     assigned_to = forms.ModelChoiceField(
         queryset=User.objects.none(),
         required=False,
-        widget=forms.Select(attrs={'class': 'form-select bg-grey text-white border-0'})
+        widget=forms.Select(attrs={'class': 'form-select bg-grey text-white border-0'}),
+        help_text="Assign this Guest to a Team Member."
     )
 
     date_of_birth = forms.CharField(
@@ -108,7 +109,6 @@ class GuestEntryForm(forms.ModelForm):
             'referrer_name': 'Who referred the Guest?',
             'referrer_phone_number': 'Referrer\'s Phone Number.',
             'message': 'Additional Notes.',
-            'assigned_to': 'Assign this Guest to a Team Member.',
         }
 
 

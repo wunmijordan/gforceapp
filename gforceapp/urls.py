@@ -21,6 +21,9 @@ from django.conf.urls.static import static
 from accounts.views import post_login_redirect
 from django.views.generic import TemplateView
 from gforceapp import views
+from django.views.generic import RedirectView
+from django.views.static import serve
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -36,6 +39,7 @@ urlpatterns = [
     
     # Post-login redirection
     path('post-login/', post_login_redirect, name='post_login_redirect'),
+    path("sw.js", lambda request: serve(request, "sw.js", document_root=settings.BASE_DIR)),
 ]
 
 # Debug + media

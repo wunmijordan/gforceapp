@@ -623,6 +623,14 @@ def guest_list_view(request):
 
     magnet_team = Team.objects.filter(name__iexact="magnet").first()
 
+    magnet_users = CustomUser.objects.filter(is_superuser=False,
+        team_memberships__team__name__iexact="Magnet",
+        is_active=True
+    ).distinct().order_by("full_name")
+
+    # Exclude project admins (Pastor/Admin roles)
+    magnet_users = [u for u in magnet_users if not is_project_admin(u)]
+
     # --- Context ---
     context = {
         'page_obj': page_obj,
@@ -647,6 +655,7 @@ def guest_list_view(request):
             "id": magnet_team.id,
             "name": magnet_team.name,
         } if magnet_team else None,
+        "magnet_users": magnet_users,
         'page_title': 'Guests',
     }
 
@@ -831,7 +840,7 @@ def edit_guest(request, pk):
         messages.error(request, "You do not have permission to edit this guest.")
         return redirect('guest_list')
 
-    reassign_allowed = user_in_groups(request.user, "Pastor,Team Lead,Admin")
+    reassign_allowed = is_magnet_admin(request.user)
     all_users = User.objects.filter(is_active=True).order_by('full_name') if reassign_allowed else None
     social_media_entries = guest.social_media_accounts.all()
 
@@ -1216,7 +1225,7 @@ def export_csv(request):
     search_query = request.GET.get('q')
 
     # Base queryset
-    if user_in_groups(request.user, "Pastor,Team Lead,Admin"):
+    if is_magnet_admin(request.user):
         guests = GuestEntry.objects.all()
         if filter_user_id and filter_user_id.isdigit():
             guests = guests.filter(assigned_to__id=filter_user_id)
@@ -1294,7 +1303,7 @@ def export_guests_excel(request):
     filter_service = request.GET.get('service')
     search_query = request.GET.get('q')
 
-    guests = GuestEntry.objects.all() if user_in_groups(request.user, "Pastor,Team Lead,Admin") else GuestEntry.objects.filter(assigned_to=request.user)
+    guests = GuestEntry.objects.all() if is_magnet_admin(request.user) else GuestEntry.objects.filter(assigned_to=request.user)
 
     if filter_user_id and filter_user_id.isdigit():
         guests = guests.filter(assigned_to__id=filter_user_id)

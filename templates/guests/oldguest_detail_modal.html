@@ -312,3 +312,286 @@
                       </label>
                       <input type="file" id="fileAttachment" class="d-none">
                     {% endif %}
+
+
+
+
+<!-- Attendance Modal -->
+  <div class="modal modal-blur fade" id="attendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-md">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h3 class="modal-title">Mark Attendance</h3>
+        </div>
+
+        <form id="attendanceForm" method="POST" action="{% url 'mark_attendance' %}">
+          {% csrf_token %}
+          <div class="modal-body">
+            <p class="text-muted mb-3">
+              Please mark your presence or follow-up for this event.
+            </p>
+
+            <!-- Hidden event info -->
+            <input type="hidden" name="event_id" id="eventIdField">
+            <input type="hidden" name="custom_event" id="customEventName">
+            <input type="hidden" name="next" value="{{ request.META.HTTP_REFERER }}">
+
+            <!-- Read-only Event Display -->
+            <div class="mb-3">
+              <label class="form-label">Event</label>
+              <input type="text" id="eventDisplayName" class="form-control"
+                    readonly
+                    style="background-color: #111827; color:#fff; border:none;">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Remarks (optional)</label>
+              <textarea name="remarks" class="form-control"
+                        placeholder="E.g. Attended virtually, followed up guest..."
+                        style="background-color: #111827; color:#fff; border:none; height:100px;"></textarea>
+            </div>
+
+            <div class="mb-3" id="statusWrapper">
+              <label class="form-label">Attendance Status</label>
+              <select name="status" id="statusSelect" class="form-select" required
+                      style="background-color: #111827; color:#fff; border:none;">
+                <option value="" disabled selected>-- Choose status --</option>
+                <option value="present">Present</option>
+                <option value="excused">Excused</option>
+                <option value="absent">Absent</option>
+              </select>
+            </div>
+
+            <input type="hidden" name="latitude" id="latitude">
+            <input type="hidden" name="longitude" id="longitude">
+          </div>
+
+          <div class="modal-footer border-0 d-flex justify-content-between">
+            <button type="submit" class="btn btn-primary" style="background-color:#0078d7; border:none;">Submit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const modalEl = document.getElementById("attendanceModal");
+    const attendanceModal = new bootstrap.Modal(modalEl, { backdrop: "static", keyboard: false });
+    const eventDisplayName = document.getElementById("eventDisplayName");
+    const eventIdField = document.getElementById("eventIdField");
+    const customEventName = document.getElementById("customEventName");
+    const attendanceForm = document.getElementById("attendanceForm");
+    const nextField = attendanceForm.querySelector('input[name="next"]');
+
+    let modalOpen = false;
+
+    // --- Capture current URL for redirect fallback ---
+    nextField.value = window.location.href;
+
+    // --- Geolocation capture ---
+    let locationReady = false;
+    function captureLocation() {
+      if (!navigator.geolocation) {
+        console.warn("Geolocation not supported");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          console.log("✅ Location captured:", pos.coords);
+          document.getElementById("latitude").value = pos.coords.latitude;
+          document.getElementById("longitude").value = pos.coords.longitude;
+          locationReady = true;
+        },
+        (err) => {
+          console.warn("⚠️ Location access denied:", err.message);
+          locationReady = false;
+        }
+      );
+    }
+
+    // --- WebSocket connection ---
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws/attendance/`);
+
+    ws.onopen = () => console.log("✅ WebSocket connected for attendance");
+    // --- Check for recent event when user logs in ---
+    async function checkRecentEvent(retry = 0) {
+      try {
+        const res = await fetch("/workforce/attendance/recent/", {
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Not JSON");
+        }
+
+        const data = await res.json();
+        if (data.event && data.event.id) {
+          openAttendanceModal(data.event);
+        } else {
+          console.log("No active event within 45-minute window");
+        }
+      } catch (err) {
+        if (retry < 3) {
+          console.warn(`Retrying recent event check (${retry + 1})...`);
+          setTimeout(() => checkRecentEvent(retry + 1), 500);
+        } else {
+          console.warn("No recent event found after retries:", err);
+        }
+      }
+    }
+
+    // Trigger check when page loads (after small delay)
+    setTimeout(checkRecentEvent, 500);
+
+    ws.onclose = () => console.warn("⚠️ WebSocket disconnected");
+    ws.onerror = (err) => console.error("WebSocket error:", err);
+
+    // --- Open modal when event broadcast received ---
+    function openAttendanceModal(event) {
+      if (modalOpen) return;
+      modalOpen = true;
+
+      modalEl.querySelector(".modal-title").textContent = `Mark Attendance for ${event.name}`;
+      eventDisplayName.value = event.name;
+      eventIdField.value = event.id;
+      customEventName.value = event.name;
+
+      attendanceModal.show();
+      captureLocation();
+      modalEl.addEventListener("hidden.bs.modal", () => (modalOpen = false), { once: true });
+    }
+
+    // --- WebSocket message handler ---
+    ws.onmessage = function (e) {
+      const data = JSON.parse(e.data);
+
+      // 🔹 Event broadcast
+      if (data.id && data.name) {
+        const now = new Date();
+        const eventTime = new Date(`${data.date}T${data.time}`);
+        const diffMinutes = Math.abs((eventTime - now) / 60000);
+        if (diffMinutes >= -1 && diffMinutes <= 45) openAttendanceModal(data);
+      }
+
+      // 🔹 Summary broadcast (live table update)
+      if (data.records) {
+        updateAttendanceSummary(data.records);
+      }
+    };
+
+    // --- AJAX form submission ---
+    attendanceForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!locationReady) {
+        e.preventDefault();
+        showToast("📍 Waiting for your location... please allow access.", "warning");
+        captureLocation();
+        return;
+      }
+      const formData = new FormData(attendanceForm);
+      const submitBtn = attendanceForm.querySelector("button[type='submit']");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Saving...";
+
+      try {
+        const response = await fetch(attendanceForm.action, {
+          method: "POST",
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          attendanceModal.hide();
+          showToast("✅ " + data.message, "success", 4000);
+
+          // 🧩 Local fallback refresh if websocket delay
+          await refreshAttendanceSummary();
+        } else {
+          showToast("⚠️ " + (data.error || "Failed to mark attendance"), "warning", 8000, true);
+          // Optional: shake effect to emphasize
+          modalEl.classList.add("shake");
+          setTimeout(() => modalEl.classList.remove("shake"), 600);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("❌ Error submitting attendance", "danger");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit";
+      }
+    });
+
+    // --- Helper: Refresh summary via AJAX (fallback) ---
+    async function refreshAttendanceSummary() {
+      try {
+        const res = await fetch("/workforce/attendance/summary/", { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        const data = await res.json();
+        if (data.records) updateAttendanceSummary(data.records);
+      } catch (err) {
+        console.warn("Could not refresh summary:", err);
+      }
+    }
+
+    // --- Helper: Update summary table ---
+    function updateAttendanceSummary(records) {
+      const tbody = document.querySelector("#attendanceTableBody");
+      if (!tbody) return;
+      tbody.innerHTML = records.map((r) => `
+        <tr>
+          <td>${r.date}</td>
+          <td>${r.event}</td>
+          <td>${r.user}</td>
+          <td>
+            ${
+              r.status === "present"
+                ? `<span class="badge bg-success-lt">Present</span>`
+                : r.status === "late"
+                ? `<span class="badge bg-danger-lt">Late</span>`
+                : r.status === "excused"
+                ? `<span class="badge bg-warning-lt">Excused</span>`
+                : `<span class="badge bg-secondary-lt">Absent</span>`
+            }
+          </td>
+          <td>${r.remarks || "—"}</td>
+        </tr>`).join("");
+    }
+
+    // --- Helper: Show toast ---
+    function showToast(message, type = "info", duration = 6000, insideModal = false) {
+      const toast = document.createElement("div");
+      toast.className = `alert alert-${type} text-center fade show fw-semibold`;
+      toast.role = "alert";
+      toast.style.marginTop = "1rem";
+      toast.style.transition = "opacity 0.3s ease";
+
+      toast.innerHTML = `
+        <div>${message}</div>
+      `;
+
+      if (insideModal) {
+        const modalBody = document.querySelector("#attendanceModal .modal-body");
+        if (modalBody) {
+          // Insert toast at the bottom of the modal
+          modalBody.appendChild(toast);
+          toast.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } else {
+        // fallback — screen toast
+        toast.classList.add("position-fixed", "bottom-0", "end-0", "m-3");
+        toast.style.zIndex = 9999;
+        document.body.appendChild(toast);
+      }
+
+      setTimeout(() => {
+        toast.classList.remove("show");
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 400);
+      }, duration);
+    }
+  });
+  </script>

@@ -42,9 +42,10 @@
         <div class="flex-grow-1 position-relative">
           <!-- Input -->
           <input type="text"
-                class="form-control rounded-4 ms-2 border-0 chat-search"
+                class="form-control text-center rounded-4 ms-2 border-0 chat-search"
                 placeholder="Search Chat" aria-label="Search"
                 style="
+                  background: #111827;
                   box-shadow: 0 4px 8px #000000d2;
                   height: 48px;             /* tall enough for icons */
                   padding: 0 20px;       /* space for logo + avatar */
@@ -215,7 +216,7 @@
                     <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
                   </svg>
                 </span>
-                <span class="nav-link-title"> Dashboard </span>
+                <span class="nav-link-title fs-4"> Dashboard </span>
               </a>
             {% else %}
               <a class="nav-link text-white" href="{% url 'dashboard' %}">
@@ -226,19 +227,39 @@
                     <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
                   </svg>
                 </span>
-                <span class="nav-link-title"> Dashboard </span>
+                <span class="nav-link-title fs-4"> Dashboard </span>
               </a>
             {% endif %}
           </li>
           <!-- Team Buttons Strip -->
           <li class="nav-item mt-2">
-            <div id="teamSelector" class="team-selector d-flex flex-column gap-1 mb-3">
+            <div id="teamSelector" class="team-selector d-flex flex-column mb-3">
               {% for team in teams %}
-                <button class="team-btn fw-bold text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
+                <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
                         data-team-id="{{ team.id }}"
                         data-team-color-class="{{ team.color_class }}"
                         data-team-name="{{ team.name }}">
-                  <i class="ti ti-users me-2"></i>{{ team.name }}
+                  <!-- Inactive icon (visible when NOT active) -->
+                  <svg class="team-icon team-icon-inactive"
+                      xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
+                    <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" />
+                    <path d="M21 7h-7m3 -3l-3 3l3 3" />
+                  </svg>
+
+                  {{ team.name }} ChatRoom
+
+                  <!-- Active icon (visible only when active) -->
+                  <svg class="team-icon team-icon-active"
+                      xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
+                    <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h7.5m2.5 10.5v7.5" />
+                    <path d="M14 7h7m-3 -3l3 3l-3 3" />
+                  </svg>
                 </button>
               {% endfor %}
             </div>
@@ -264,29 +285,65 @@
                 </svg>
               </a>
               <!-- Avatar -->
-              <span class="avatar avatar-lg bg-purple-lt d-flex align-items-center justify-content-center" style="width:40px; height:40px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-armchair">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M5 11a2 2 0 0 1 2 2v2h10v-2a2 2 0 1 1 4 0v4a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z" />
-                  <path d="M5 11v-5a3 3 0 0 1 3 -3h8a3 3 0 0 1 3 3v5" />
-                  <path d="M6 19v2" /><path d="M18 19v2" />
-                </svg>
+              <span class="d-flex align-items-center justify-content-center" style="width:40px; height:40px;">
+                {% if request.user|is_project_wide_admin %}
+                  <a class="nav-link text-white" href="{% url 'accounts:admin_dashboard' %}">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                        <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                        <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                        <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                      </svg>
+                    </span>
+                  </a>
+                {% else %}
+                  <a class="nav-link text-white" href="{% url 'dashboard' %}">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                        <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                        <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                        <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                      </svg>
+                    </span>
+                  </a>
+                {% endif %}
               </span>
 
               <!-- Text -->
-              <kbd class="ms-2 bg-warning-lt"><h6>A People <em>Helped</em> By God!</h6></kbd>
+              <kbd class="bg-warning-lt"><h5>A People <em>Helped</em> By God!</h5></kbd>
             </div>
             <!-- Desktop User list -->
             <div class="card-body p-0 mt-0 mb-3 scrollable flex-fill">
               <div class="row g-2">
                 <!-- Team Buttons Strip -->
-                <div id="teamSelector" class="team-selector d-flex flex-column gap-1 mb-3">
+                <div id="teamSelector" class="team-selector d-flex flex-column mb-3">
                   {% for team in teams %}
-                    <button class="team-btn fw-bold text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
+                    <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
                             data-team-id="{{ team.id }}"
                             data-team-color-class="{{ team.color_class }}"
                             data-team-name="{{ team.name }}">
-                      <i class="ti ti-users me-2"></i>{{ team.name }}
+
+                      <!-- Inactive icon (visible when NOT active) -->
+                      <svg class="team-icon team-icon-inactive"
+                          xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                          stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
+                        <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" />
+                        <path d="M21 7h-7m3 -3l-3 3l3 3" />
+                      </svg>
+
+                      {{ team.name }} ChatRoom
+
+                      <!-- Active icon (visible only when active) -->
+                      <svg class="team-icon team-icon-active"
+                          xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                          stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
+                        <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h7.5m2.5 10.5v7.5" />
+                        <path d="M14 7h7m-3 -3l3 3l-3 3" />
+                      </svg>
                     </button>
                   {% endfor %}
                 </div>
@@ -348,9 +405,10 @@
               <div class="input-icon position-absolute">
                 <!-- Input -->
                 <input type="text"
-                      class="form-control rounded-4 ms-2 border-0 chat-search"
+                      class="form-control text-center rounded-4 ms-2 border-0 chat-search"
                       placeholder="Search Chat" aria-label="Search"
                       style="
+                        background: #111827;
                         box-shadow: 0 4px 8px #000000d2;
                         height: 48px;             /* tall enough for icons */
                         padding-left: 48px;       /* space for logo */
@@ -358,7 +416,7 @@
                         width: 250px;
                       ">
 
-                <!-- Avatar / SVG inside input (right) -->
+                <!-- Avatar / SVG inside input (right)
                 <span class="input-icon-addon top-50 start-0 translate-middle-y ps-3 me-2">
                   <span class="d-flex align-items-center justify-content-center" style="width:32px; height:32px;">
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-user-search">
@@ -368,20 +426,32 @@
                     </svg>
                   </span>
                   </span>
-                </span>
+                </span>-->
 
-                <!-- Logo inside input (left) -->
+                <!-- Logo inside input (left) 
                 <span class="input-icon-addon top-50 end-0 translate-middle-y ps-3 me-2" style="pointer-events:auto;">
                   {% if request.user|is_project_wide_admin %}
-                    <a href="{% url 'accounts:admin_dashboard' %}">
-                      <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="32" height="32">
+                    <a class="nav-link text-white" href="{% url 'accounts:admin_dashboard' %}">
+                      <span class="nav-link-icon d-md-none d-lg-inline-block">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                          <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                          <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                          <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                        </svg>
+                      </span>
                     </a>
                   {% else %}
-                    <a href="{% url 'dashboard' %}">
-                      <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="32" height="32">
+                    <a class="nav-link text-white" href="{% url 'dashboard' %}">
+                      <span class="nav-link-icon d-md-none d-lg-inline-block">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                          <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
+                          <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path>
+                          <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path>
+                        </svg>
+                      </span>
                     </a>
                   {% endif %}
-                </span>
+                </span>-->
               </div>
 
               <!-- Desktop right icons (classic style, hidden on mobile) -->
@@ -576,8 +646,8 @@
 
                   <!-- Reply Preview (inline above textarea) -->
                   <div id="replyPreview" 
-                      class="d-none d-flex reply-preview text-white p-2 mb-1 rounded-2 justify-content-between align-items-center"
-                      style="border-left: 4px solid #018f14ff; background-color: #111827; font-style: normal; box-shadow: 0 4px 8px #0000004d;">
+                      class="d-none d-flex reply-preview text-white p-2 mb-1 justify-content-between align-items-center"
+                      style="border-radius: 6px; border-left: 4px solid #018f14ff; background-color: #111827; font-style: normal; box-shadow: 0 4px 8px #0000004d;">
                     <span id="replyPreviewText"></span>
                     <span id="cancelReply" class="p-0 border-0 d-flex align-items-center justify-content-center"
                           style="flex:0 0 auto; cursor:pointer;">
@@ -918,7 +988,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const banner = document.createElement("div");
   banner.id = "chatRoomBanner";
   banner.className = "chat-room-banner";
-  banner.innerHTML = `<div class="banner-inner"><span class="banner-text">GForce Chat Room</span></div>`;
+  banner.innerHTML = `<div class="banner-inner"><span class="banner-text">GForce ChatRoom</span></div>`;
   chatContainer.prepend(banner);
 
   // Make banner clickable
@@ -1125,11 +1195,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!textEl) return;
 
     if (!teamName) {
-      textEl.innerText = "Welcome back to GForce Chat Room";
+      textEl.innerText = "Welcome back to GForce ChatRoom";
       banner.style.background = "#111827";
       banner.style.color = "#f59f00";
     } else {
-      textEl.innerText = `${teamName} Chat Room`;
+      textEl.innerText = `${teamName} ChatRoom`;
 
       if (colorClass) {
         banner.className = "chat-room-banner"; // reset
@@ -2216,7 +2286,7 @@ document.addEventListener("DOMContentLoaded", () => {
             g.image
               ? `<img src="${g.image}" style="width:35px;height:35px;border-radius:4px;object-fit:cover;">`
               : `<span class="avatar bg-gray d-flex align-items-center justify-content-center"
-                    style="width:35px;height:35px;border-radius:4px;">${g.name?.[0] || "?"}</span>`
+                    style="width:35px;height:35px;border-radius:10px;">${g.name?.[0] || "?"}</span>`
           }
           <span class="ms-2 text-warning">${g.title || ""} ${g.name || ""}</span>
         </div>`;
@@ -2233,7 +2303,7 @@ document.addEventListener("DOMContentLoaded", () => {
         attachmentPreview = `
           <div class="mt-1 d-flex align-items-center gap-2">
             <img src="${fileUrl}" alt="${f.name}" 
-                style="width:45px;height:45px;object-fit:cover;border-radius:4px;">
+                style="width:45px;height:45px;object-fit:cover;border-radius:10px;">
             <span class="small text-secondary text-truncate" style="max-width:120px;">${f.name}</span>
           </div>`;
       } else {
@@ -2241,7 +2311,7 @@ document.addEventListener("DOMContentLoaded", () => {
         attachmentPreview = `
           <div class="mt-1 d-flex align-items-center gap-2">
             <div class="d-flex align-items-center justify-content-center"
-                style="width:35px;height:35px;background:#1f2937;border-radius:4px;">
+                style="width:35px;height:35px;background:#1f2937;border-radius:10px;">
               ${icon}
             </div>
             <span class="small text-secondary text-truncate" style="max-width:120px;">${f.name}</span>
@@ -2257,9 +2327,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ${
             lp.image
               ? `<img src="${lp.image}" alt="${lp.title}" 
-                    style="width:40px;height:40px;border-radius:4px;object-fit:cover;">`
+                    style="width:40px;height:40px;border-radius:10px;object-fit:cover;">`
               : `<span class="avatar bg-blue-lt d-flex align-items-center justify-content-center"
-                    style="width:40px;height:40px;border-radius:4px;">🌐</span>`
+                    style="width:40px;height:40px;border-radius:10px;">🌐</span>`
           }
           <div class="d-flex flex-column" style="max-width:140px;">
             <span class="small text-white text-truncate">${lp.title || lp.url}</span>
@@ -2280,9 +2350,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Wrap only when used in a chat bubble
     return inBubble
-      ? `<div class="chat-reply-preview fs-7 mb-1 p-1 rounded"
+      ? `<div class="chat-reply-preview fs-7 mb-1 p-1"
                 data-parent-id="${data.parent.id}"
-                style="cursor:pointer; background: #111827;
+                style="border-radius:10px; cursor:pointer; background: #111827;
                       border-left:4px solid #018f14ff; width:auto;
                       box-shadow: 0 4px 8px #0000004d;">
             ${innerHTML}
@@ -2401,16 +2471,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       guestHTML = `
-        <div class="chat-guest-card text-white text-center px-2 py-2 mb-2 rounded-2 d-flex flex-column align-items-center gap-2"
-            style="max-width: 250px; box-shadow: 0 4px 8px #000000a1; background-color: #11182781;">
+        <div class="chat-guest-card text-white text-center px-2 py-2 mb-2 d-flex flex-column align-items-center gap-2"
+            style="border-radius: 10px; max-width: 250px; box-shadow: 0 4px 8px #000000a1; background-color: #11182781;">
 
           ${data.guest.image
             ? `<img src="${data.guest.image}" alt="${data.guest.name}" 
-                    style="width:200px; height:200px; object-fit:cover; border-radius:6px;
+                    style="width:200px; height:200px; object-fit:cover; border-radius:10px;
                     box-shadow: 0 4px 8px #000000a1; cursor:pointer;"
                     data-bs-toggle="modal" data-bs-target="#previewModal${data.guest.id}">`
             : `<div class="avatar bg-gray d-flex align-items-center justify-content-center fs-2 fw-bold"
-                  style="width:200px; height:200px; border-radius:6px;
+                  style="width:200px; height:200px; border-radius:10px;
                   box-shadow: 0 4px 8px #000000a1;">
                 ${data.guest.name ? data.guest.name[0].toUpperCase() : "?"}
               </div>`}
@@ -2576,12 +2646,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const messageHTML = linkify(formattedMsg);
     bubble.innerHTML = `
       <div class="d-flex align-items-end ${isMe ? "justify-content-end" : ""}">
-        ${!isMe ? `<div class="me-1">${avatarHTML}</div>` : ""}
-        <div class="chat-bubble ${isMe ? 'chat-bubble-me' : ""} ${bubbleColorClass}"
+        ${!isMe ? `<div class="me-1" style="bottom: 10px;">${avatarHTML}</div>` : ""}
+        <div class="chat-bubble m-0 pt-1 ${isMe ? 'chat-bubble-me' : ""} ${bubbleColorClass}"
             style="box-shadow: 0 4px 8px #000000d2; display: flex; flex-direction: column;
-                    align-items: stretch; cursor: pointer; max-width: 75%; left: 20px border-radius: 12px; width: fit-content;">
+                    align-items: stretch; cursor: pointer; max-width: 75%; width: fit-content;">
           ${!isMe ? `
-            <div class="chat-bubble-title" style="font-size: 0.75rem;">
+            <div class="chat-bubble-title mb-1" style="font-size: 0.75rem;">
               <small><i class="chat-bubble-author" style="color: inherit;">
                 ${data.sender_title || ""} ${data.sender_name}
               </i></small>
@@ -2596,8 +2666,8 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="fs-4 text-white"
                   style="white-space: pre-wrap; word-break: break-word; margin:0; padding:0;">${messageHTML}</div></div>` : ""}
             <div style="display:flex; justify-content:flex-end; width:100%;">
-              <small class="chat-bubble-date text-muted"
-                    style="white-space: nowrap; font-size: 0.6rem;" 
+              <small class="chat-bubble-date text-muted me-1 mb-1"
+                    style="white-space: nowrap; font-size: 0.5rem;" 
                     data-full-date="${data.created_at}">
                 ${new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
               </small>
@@ -3353,7 +3423,7 @@ document.addEventListener("DOMContentLoaded", () => {
     preview.style.boxShadow = "0 4px 8px #0000004d";
     preview.innerHTML = `
       ${guest.image
-        ? `<img src="${guest.image}" style="width:70px;height:70px;border-radius:4px;object-fit:cover;margin-right:10px;">`
+        ? `<img src="${guest.image}" style="width:70px;height:70px;border-radius:6px;object-fit:cover;margin-right:10px;">`
         : `<span class="avatar bg-gray d-flex align-items-center justify-content-center"
                   style="width:70px;height:70px;border-radius:4px;margin-right:10px;">${guest.name[0]}</span>`}
 

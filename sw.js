@@ -1,4 +1,4 @@
-// static/js/sw.js
+// sw.js
 
 // Install event
 self.addEventListener('install', event => {
