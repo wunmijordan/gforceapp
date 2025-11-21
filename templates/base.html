@@ -969,23 +969,27 @@
   </div>
 
   <div id="iosInstallBanner"
-      style="display:none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-              background: #1f2937; color: white; padding: 14px 18px; border-radius: 16px;
-              box-shadow: 0 6px 18px rgba(0,0,0,0.4); z-index: 9999; width: 90%; max-width: 380px;
+      style="display:none; position: fixed; bottom: 50%; left: 50%; transform: translateX(-50%);
+              background: #111827; color: white; padding: 14px 18px; border-radius: 18px;
+              box-shadow: 0 6px 18px #000000ee; z-index: 9999; width: 90%; max-width: 380px;
               font-size: 0.95rem; backdrop-filter: blur(6px);">
     
-    <div style="display:flex; align-items:center; gap:10px;">
+    <div style="display:flex; align-items:center; gap:12px;">
         <img src="/static/images/icons/icon-192x192.png"
-            style="width:40px; height:40px; border-radius:10px;">
+            style="width:60px; height:60px; border-radius:10px;">
     
-        <div style="flex:1; line-height:1.2;">
-          <strong>Install GForceApp</strong><br>
-          Tap <img src="/static/images/icon-192x192.png" style="width:16px; vertical-align:middle;">
+        <div style="flex:1; line-height:1.25;">
+          <span class="fst-italic">Install <strong style="color: #ff5e01ff;"> GForceApp</strong></span><br>
+          Tap 
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#806885ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-share-2">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1" />
+            <path d="M12 14v-11" /><path d="M9 6l3 -3l3 3" />
+          </svg><br>
           then “Add to Home Screen”
         </div>
 
         <button id="closeIosBanner"
-                style="background:none; border:none; color:white; font-size:18px; cursor:pointer;">
+                style="background:none; border:none; color:red; font-size:18px; cursor:pointer;">
           &times;
         </button>
     </div>
