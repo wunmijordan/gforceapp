@@ -915,19 +915,19 @@
                       </button>
                     </div>
                     <div id="collapse-reports-{{ guest.id }}" class="accordion-collapse collapse" data-bs-parent="#accordion-{{ guest.id }}">
-                      <div class="accordion-body">
+                      <div class="accordion-body" style="overflow-y:auto; max-height:100px;">
                         {% if guest.reports.exists %}
                           <ul class="list-group list-group-flush">
                             {% for report in guest.reports.all %}
                               <li class="list-group-item">
                                 <div class="d-flex justify-content-between align-items-center">
                                   <div>
-                                    <small class="text-muted" style="font-family: monospace;">{{ report.report_date|date:"M d, Y" }}</small>
+                                    <small class="text-muted me-3" style="font-family: monospace;">{{ report.report_date|date:"M d, Y" }}</small>
                                   </div>
                                   <div>
-                                    <strong class="text-white">{{ report.note }}</strong>
+                                    <span class="text-white me-2">{{ report.note }}</span>
                                   </div>
-                                  <div class="text-end">
+                                  <div class="text-end ms-2">
                                     <span class="badge
                                       {% if report.guest.status == 'planted' %}bg-success-lt
                                       {% elif report.guest.status == 'planted_elsewhere' %}bg-danger-lt
