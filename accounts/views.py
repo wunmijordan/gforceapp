@@ -407,8 +407,10 @@ def admin_dashboard(request):
         name__in=["Pastor", "Admin"]
     ).exists()
 
-    start_of_week = today - timedelta(days=today.weekday())  # Monday start
-    start_of_sunday = start_of_week - timedelta(days=1)      # Adjust to Sunday start
+    # Weekly window: Sunday → Saturday
+    weekday = today.isoweekday()  # Monday=1..Sunday=7
+
+    start_of_sunday = today - timedelta(days=(weekday % 7))   # Sunday gives 0
     end_of_week = start_of_sunday + timedelta(days=6)        # Sunday → Sunday window
 
     # ✅ Filter events based on access level
