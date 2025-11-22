@@ -3,7 +3,7 @@ import requests, mimetypes, os, re, urllib.parse, urllib
 from bs4 import BeautifulSoup
 from accounts.models import CustomUser
 from guests.models import GuestEntry
-from .consumers import get_user_color
+from .consumers import get_user_color, handle_file_upload
 from django.db.models.fields.files import FieldFile
 from django.core.files.storage import default_storage
 from django.utils import timezone
@@ -81,73 +81,46 @@ def serialize_message(m, mention_map=None, mention_regex=None):
 
     # --- Helper to resolve file URLs
     def build_file_payload(file_obj, message_id):
-      """Return standardized file payload for chat messages (works for both dev and prod)."""
-      if not file_obj:
-          return None
+        """Return standardized file payload for chat messages (works for dev + prod)."""
+        if not file_obj:
+            return None
 
-      try:
-          # --- Case 1: FileField or CloudinaryField ---
-          if isinstance(file_obj, FieldFile):
-              file_name = urllib.parse.unquote(os.path.basename(file_obj.name))
-              file_url = getattr(file_obj, "url", None)
+        try:
+            # file_obj is now always a string (Cloudinary public_id or relative path)
+            file_path = str(file_obj).lstrip("/")
+            file_name = urllib.parse.unquote(os.path.basename(file_path)) or "file"
 
-              # 🧩 Fix malformed or missing URL
-              if not file_url:
-                  file_url = f"/media/{file_obj.name.lstrip('/')}"
-              elif file_url.startswith("/media/media/"):
-                  file_url = file_url.replace("/media/media/", "/media/")
-              elif not file_url.startswith("/media/") and settings.DEBUG:
-                  # Ensure it always begins with single /media/ in dev
-                  file_url = f"/media/{file_url.lstrip('/')}"
+            # Determine URL
+            if file_path.startswith("http"):
+                file_url = file_path
+            elif settings.DEBUG:
+                # Local dev
+                if file_path.startswith("media/"):
+                    file_url = f"/{file_path}"
+                else:
+                    file_url = f"/media/{file_path}"
+            elif "res.cloudinary.com" in file_path:
+                # Full Cloudinary URL stored
+                file_url = file_path
+            else:
+                # Cloudinary public_id → generate full URL
+                file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
 
-              # 🧠 Production: make sure we use absolute Cloudinary URL
-              if not settings.DEBUG:
-                  if not file_url.startswith("http"):
-                      if "res.cloudinary.com" not in file_url:
-                          file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_obj.name.lstrip('/')}"
+            guessed_type, _ = mimetypes.guess_type(file_path)
+            file_type = guessed_type or "application/octet-stream"
 
-              file_size = getattr(file_obj, "size", None)
-              guessed_type, _ = mimetypes.guess_type(file_name)
-              file_type = getattr(file_obj.file, "content_type", None) or guessed_type or "application/octet-stream"
+            return {
+                "id": message_id,
+                "url": file_url,
+                "name": file_name,
+                "size": None,  # We can optionally store size in DB if needed
+                "type": file_type,
+            }
 
-          # --- Case 2: Raw string or URL ---
-          else:
-              file_path = str(file_obj).lstrip("/")
-              file_name = urllib.parse.unquote(os.path.basename(file_path)) or "file"
-
-              # Decide which base to apply
-              if file_path.startswith("http"):
-                  file_url = file_path
-              elif settings.DEBUG:
-                  if file_path.startswith("media/"):
-                      file_url = f"/{file_path}"
-                  else:
-                      file_url = f"/media/{file_path}"
-              elif "res.cloudinary.com" in file_path:
-                  file_url = file_path
-              else:
-                  file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
-
-              guessed_type, _ = mimetypes.guess_type(file_path)
-              file_type = guessed_type or "application/octet-stream"
-              file_size = None
-
-          # ✅ Normalize double prefixes again (safety)
-          if settings.DEBUG and file_url.startswith("/media/media/"):
-              file_url = file_url.replace("/media/media/", "/media/")
-
-          return {
-              "id": message_id,
-              "url": file_url,
-              "name": file_name,
-              "size": file_size,
-              "type": file_type,
-          }
-
-      except Exception as e:
-          import logging
-          logging.warning("build_file_payload error: %s", e)
-          return None
+        except Exception as e:
+            import logging
+            logging.warning("build_file_payload error: %s", e)
+            return None
 
     # --- Parent (reply-to)
     parent_payload = None

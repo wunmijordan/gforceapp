@@ -322,54 +322,48 @@ def load_more_messages(request):
 
 @csrf_exempt
 def upload_file(request):
-    """Upload a file (to Cloudinary in prod or local media in dev) and return metadata."""
+    """Upload a file (Cloudinary or local) and return full metadata"""
     if request.method != "POST" or "file" not in request.FILES:
         return JsonResponse({"error": "Invalid request"}, status=400)
 
-    try:
-        f = request.FILES["file"]
+    f = request.FILES["file"]
 
-        # --- Production: Upload to Cloudinary ---
+    try:
         if not settings.DEBUG:
+            # Cloudinary
             import cloudinary.uploader
             result = cloudinary.uploader.upload(
                 f,
                 folder="chat/files",
-                resource_type="auto"  # handles any file type (image, pdf, video, etc.)
+                resource_type="auto"
             )
-            file_url = result["secure_url"]  # full HTTPS URL
-            file_path = result["public_id"]  # Cloudinary public ID (for internal reference)
-
-        # --- Development: Save locally ---
+            file_url = result["secure_url"]
+            file_path = result["public_id"]
         else:
-            # Save to MEDIA_ROOT/chat/files/
+            # Local dev
+            from django.core.files.storage import default_storage
             file_path = default_storage.save(f"chat/files/{f.name}", f)
-
-            # Ensure we never double-prefix /media/
-            file_path = file_path.lstrip("/")  # strip any accidental leading slash
+            file_path = file_path.lstrip("/")
             if file_path.startswith("media/"):
-                file_path = file_path.replace("media/", "", 1)
-
-            # ✅ Consistent URL for dev
+                file_path = file_path[len("media/"):]
             file_url = f"/media/{file_path}"
 
-        # Detect MIME type
         guessed_type, _ = mimetypes.guess_type(f.name)
 
         return JsonResponse({
-            "url": file_url,          # ✅ always usable for frontend preview
-            "path": file_path,        # for backend reference
-            "display_url": file_url,  # alias for clarity
+            "url": file_url,        # always frontend-ready
+            "path": file_path,      # store in DB
+            "public_id": file_path, # Cloudinary id or local path
             "name": f.name,
-            "saved_name": os.path.basename(file_path),
             "size": f.size,
             "type": guessed_type or f.content_type or "application/octet-stream",
         })
 
     except Exception as e:
         import logging
-        logging.error("File upload failed: %s", e)
+        logging.exception("File upload failed")
         return JsonResponse({"error": str(e)}, status=500)
+
 
 
 

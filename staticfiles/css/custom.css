@@ -773,6 +773,46 @@
   }
 }
 
+/* New Guest Badge */
+.new-badge-gradient {
+  position: relative;
+  display: inline-block;
+  z-index: 0;
+}
+
+.new-badge-gradient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px; /* border thickness */
+  border-radius: inherit;
+  background: linear-gradient(90deg, 
+    #f59f008c, 
+    #394255, 
+    #ffd04d, 
+    #f97316, 
+    #14f50088);
+  background-size: 400% 400%;
+  animation: borderflow 6s linear infinite;
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  /* Standard mask for non-WebKit browsers */
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  z-index: -1;
+}
+
+@keyframes borderflow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 400% 50%;
+  }
+}
+
 
 
 
@@ -1521,6 +1561,8 @@
     border-radius: 1rem;
     flex-shrink: 0;
   }
+
+  
 
   
 

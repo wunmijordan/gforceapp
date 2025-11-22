@@ -114,7 +114,7 @@
                 <span class="typing-text">Welcome back,</span>
               </div>
               <span style="font-size: 3rem; font-weight: bold; line-height: 1.1;">
-                <small>{{ request.user.title|default:"" }}</small><br> {{ request.user.full_name }}
+                <small style="font-size: 1.5rem; font-style: italic;">{{ request.user.title|default:"" }}</small><br> {{ request.user.full_name }}
               </span>
               <div class="d-flex flex-wrap gap-2 mt-4 mb-2 justify-content-start">
                 {% if not request.user|is_project_admin %}

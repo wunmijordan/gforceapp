@@ -237,14 +237,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         parent_id = data.get("reply_to_id")
         mentions_ids = data.get("mentions", [])
         file_data = data.get("file") or {} # expect dict {url,name,size,type}
-        file_url = file_data.get("url")
+        file_url = file_data.get("url") if file_data else None
         link_preview = data.get("link_preview")
         team_id = data.get("team_id")
 
         if not message.strip() and not guest_id and not file_url and not link_preview:
             return
 
-        saved_message = await self.create_message(sender_id, message, guest_id, parent_id, mentions_ids, file_url, link_preview, team_id)
+        saved_message = await self.create_message(sender_id, message, guest_id, parent_id, mentions_ids, file_url, link_preview, team_id, file_data)
         payload = {**saved_message, "type": "chat_message", "color": get_user_color(sender_id)}
         await self.channel_layer.group_send(self.room_group_name, payload)
 
@@ -380,7 +380,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def create_message(
         self, sender_id, message,
         guest_id=None, parent_id=None, mentions_ids=None,
-        file_url=None, link_preview=None, team_id=None
+        file_url=None, link_preview=None, team_id=None, file_data=None
     ):
         from .models import ChatMessage, Team
         from accounts.models import CustomUser
@@ -418,8 +418,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             # ✅ Cloudinary / Local upload
             file_field = None
-            if file_url:
-                file_field = handle_file_upload(file_url)
+            file_type = None
+            if file_data:
+                file_type = file_data.get("type")
+                if not settings.DEBUG:
+                    # Cloudinary → MUST store public_id
+                    file_field = file_data.get("public_id")
+                else:
+                    # Dev → MUST store relative path for FileField
+                    file_field = file_data.get("path")
 
             # ✅ Save message with real FileField
             saved = ChatMessage.objects.create(
@@ -429,6 +436,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 guest_card=guest_card,
                 parent=parent,
                 file=file_field,   # 👈 this is now always a FileField
+                file_type=file_type,
                 link_url=link_meta.get("url"),
                 link_title=link_meta.get("title"),
                 link_description=link_meta.get("description"),

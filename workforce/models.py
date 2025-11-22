@@ -126,7 +126,7 @@ class ChatMessage(models.Model):
   )
 
   # Attachments
-  file = CloudinaryField("file", folder="chat/files", blank=True, null=True)
+  file = models.CharField(max_length=500, blank=True, null=True)
   file_type = models.CharField(max_length=100, blank=True, null=True)
 
   # Link preview

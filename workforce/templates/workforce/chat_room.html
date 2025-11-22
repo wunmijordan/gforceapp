@@ -641,7 +641,7 @@
               <!-- Message Input --> 
               <div class="card-footer border-0"> 
                 
-                <div class="input-group input-group-flat border-0 d-flex flex-column p-2"
+                <div class="chat-footer input-group input-group-flat border-0 d-flex flex-column p-2"
                     style="box-shadow: 0 4px 8px #000000d2; border-radius: 1rem; background: #0c1420;">
 
                   <!-- Reply Preview (inline above textarea) -->
@@ -760,7 +760,8 @@ const USER_PERMS = JSON.parse('{{ context_user_permissions|escapejs }}');
 document.addEventListener("DOMContentLoaded", () => {
   const chatContainer = document.getElementById("chatMessagesContainer");
   const stickyDateHeader = document.getElementById("stickyDateHeader");
-  const chatInput = document.getElementById("chatInput") || document.querySelector(".chat-wrapper .card-footer");
+  const chatInput = document.getElementById("chatInput");
+  const chatFooter = document.querySelector(".card-footer");
   const sendButton = document.getElementById("sendButton");
   const replyPreview = document.getElementById("replyPreview");
   const replyPreviewText = document.getElementById("replyPreviewText");
@@ -3853,36 +3854,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  const chatWrapper = document.querySelector(".chat-wrapper");
-  const chatBody = document.querySelector(".chat-card .card-body");
+  // 🔹 Adjust footer on input focus (mobile keyboards)
+  chatInput.addEventListener("focus", () => {
+    chatFooter.style.transform = "translateY(-env(safe-area-inset-bottom))"; // optional safe-area
+    chatFooter.style.transition = "transform 0.3s ease";
+  });
 
-  // Set initial --vh value for modern browsers
-  function setViewportHeight() {
-    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    document.documentElement.style.setProperty("--vh", `${vh * 0.01}px`);
-  }
-
-  // Initialize
-  setViewportHeight();
-
-  // Update when viewport changes (e.g., keyboard opens)
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", setViewportHeight);
-  } else {
-    window.addEventListener("resize", setViewportHeight);
-  }
-
-  // Optional: scroll to input on focus for mobile keyboard visibility
-  if (chatInput) {
-    const textarea = chatInput.querySelector("textarea");
-    if (textarea) {
-      textarea.addEventListener("focus", () => {
-        setTimeout(() => {
-          textarea.scrollIntoView({ behavior: "smooth", block: "end" });
-        }, 300);
-      });
-    }
-  }
+  chatInput.addEventListener("blur", () => {
+    chatFooter.style.transform = "translateY(0)";
+  });
 
 
 

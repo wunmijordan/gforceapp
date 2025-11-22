@@ -279,7 +279,7 @@ def dashboard_view(request):
     # === Next available events for the week ===
     start_of_week = today - timedelta(days=today.weekday())  # Monday start
     start_of_sunday = start_of_week - timedelta(days=1)      # Adjust to Sunday start
-    end_of_week = start_of_sunday + timedelta(days=7)        # Sunday → Sunday window
+    end_of_week = start_of_sunday + timedelta(days=6)        # Sunday → Sunday window
 
     # Filter the user's events for this week (including GForce)
     weekly_events = [
