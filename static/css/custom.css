@@ -1336,7 +1336,7 @@
   }*/
 
 .preview {
-  position: fixed;
+  position: fixed !important;
   top: 50%;
   left: 10px;
   transform: translateY(-50%);
@@ -1347,7 +1347,7 @@
   white-space: pre-wrap;
   max-width: 200px;
   overflow-wrap: break-word;
-  z-index: 1000;
+  z-index: 10000;
   font-size: 0.65rem;
   border-radius: 0.5rem;
 }

@@ -1413,6 +1413,19 @@ document.addEventListener("DOMContentLoaded", function () {
       const totals = data.totals || {};
       const today = data.today || {};
 
+      const eventId = window.currentEvent?.id;
+      const clockOutBtn = document.querySelector(".mark-btn[data-status='clock_out']");
+
+      // Sync attendanceMarked based on backend summary
+      if (eventId && today.clock_in && !today.clock_out) {
+        attendanceMarked[eventId] = true;
+        if (clockOutBtn) clockOutBtn.classList.remove("d-none");
+      } else if (eventId && today.clock_out) {
+        // User already clocked out
+        attendanceMarked[eventId] = false;
+        if (clockOutBtn) clockOutBtn.classList.add("d-none");
+      }
+
       // Detect if these are percentages (string with "%")
       const isPercentage = typeof summary.present === "string" && summary.present.includes("%");
 
@@ -1537,8 +1550,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Trigger UI refresh (will fallback to local fetch if WS didn’t push yet)
       fetchSummary();
+      return true;
     } else {
       showToast(`⚠️ ${data.error}`);
+      return false;
     }
   }
 
@@ -2100,11 +2115,11 @@ document.addEventListener("DOMContentLoaded", function () {
       const lat = document.getElementById("latitude").value;
       const lon = document.getElementById("longitude").value;
 
-      // Disable button while submitting
-      btn.disabled = true;
-      btn.textContent = "Submitting...";
+      const clockOutBtn = document.querySelector(
+        ".mark-btn[data-status='clock_out']"
+      );
 
-      // Common function to close modal safely
+      // --- Helper to close modal safely ---
       const closeModal = () => {
         const modalInstance = bootstrap.Modal.getInstance(
           document.getElementById("dashboardAttendanceModal")
@@ -2112,19 +2127,42 @@ document.addEventListener("DOMContentLoaded", function () {
         if (modalInstance) modalInstance.hide();
       };
 
+      // --- Helper: protect Clock Out until attendance is marked ---
+      if (status === "clock_out" && !attendanceMarked[eventId]) {
+        showToast("⚠️ You must mark attendance before clocking out.");
+        return;
+      }
+
+      // Disable button while submitting
+      btn.disabled = true;
+      btn.textContent = "Submitting...";
+
       try {
-        // --- Special handling for CLOCK OUT ---
+        // --- CLOCK OUT FLOW ---
         if (status === "clock_out") {
           const success = await toggleClock("clock_out");
+
           if (success !== false) {
             showToast("✅ Clocked out successfully");
-            btn.classList.add("pulse-success");
-            setTimeout(() => btn.classList.remove("pulse-success"), 800);
 
-            // ✅ Remove from attendanceMarked tracker
+            // Reset attendance marker
             attendanceMarked[eventId] = false;
 
-            // ✅ Auto-close modal after successful clock out
+            // Hide the clock-out button again
+            if (clockOutBtn) clockOutBtn.classList.add("d-none");
+
+            // Re-enable all attendance buttons for next action
+            document.querySelectorAll(".mark-btn").forEach((b) => {
+              if (b.dataset.status !== "clock_out") {
+                b.disabled = false;
+                b.textContent = b.dataset.status
+                  .split("_")
+                  .map((s) => s[0].toUpperCase() + s.slice(1))
+                  .join(" ");
+                b.classList.remove("btn-secondary");
+              }
+            });
+
             closeModal();
             exitEventMode();
             fetchSummary();
@@ -2137,7 +2175,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        // --- Normal attendance marking flow ---
+        // --- NORMAL ATTENDANCE FLOW ---
         const res = await fetch(form.action, {
           method: "POST",
           headers: {
@@ -2157,16 +2195,16 @@ document.addEventListener("DOMContentLoaded", function () {
         const data = await res.json();
 
         if (res.ok && data.success) {
+          attendanceMarked[eventId] = true;
+
           showToast(`✅ ${data.message || `${status} marked successfully`}`);
-          btn.classList.add("pulse-success");
-          setTimeout(() => btn.classList.remove("pulse-success"), 800);
 
           await toggleClock("clock_in");
 
-          // ✅ Mark attendance as done for this event
-          attendanceMarked[eventId] = true;
+          // Show clock-out button
+          if (clockOutBtn) clockOutBtn.classList.remove("d-none");
 
-          // Disable other attendance buttons
+          // Disable all attendance options
           document.querySelectorAll(".mark-btn").forEach((b) => {
             if (b.dataset.status !== "clock_out") {
               b.disabled = true;
@@ -2175,20 +2213,16 @@ document.addEventListener("DOMContentLoaded", function () {
             }
           });
 
-          // ✅ Auto-close modal after marking attendance
           closeModal();
-
-          // ✅ Return to main view
           exitEventMode();
           fetchSummary();
         } else {
           showToast(`⚠️ ${data.error || "Failed to mark attendance"}`);
         }
       } catch (err) {
-        console.error("Error marking attendance:", err);
+        console.error("Attendance error:", err);
         showToast("⚠️ Network or server error while marking attendance.");
       } finally {
-        // Re-enable button label
         btn.disabled = false;
         btn.textContent = status
           .split("_")

@@ -641,7 +641,7 @@
               <!-- Message Input --> 
               <div class="card-footer border-0"> 
                 
-                <div class="chat-footer input-group input-group-flat border-0 d-flex flex-column p-2"
+                <div class="input-group input-group-flat border-0 d-flex flex-column p-2"
                     style="box-shadow: 0 4px 8px #000000d2; border-radius: 1rem; background: #0c1420;">
 
                   <!-- Reply Preview (inline above textarea) -->
@@ -693,7 +693,7 @@
                               placeholder="Type Message" rows="1"
                               style="resize: none; overflow: hidden; background: transparent;"></textarea>
 
-                    <div id="preview" class="preview"></div>
+                    
 
                     <!-- Send Button -->
                     <a href="#" id="sendButton" class="link-secondary p-2 text-green d-flex align-items-center justify-content-center"
@@ -710,8 +710,10 @@
                 </div>
                 <!-- Mention dropdown -->
                 <div id="mentionDropdown" class="mention-dropdown d-none"></div> 
+                
               </div> 
             {% endif %}
+            <div id="preview" class="preview"></div>
           </div>
         </div>
       </div>

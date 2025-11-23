@@ -867,6 +867,7 @@ def attendance_summary(request):
         },
         "today": {
             "clocked_in": clocked_in,
+            "attendance_marked": today_clock is not None,
             "clock_in": today_clock.clock_in.strftime("%H:%M") if today_clock and today_clock.clock_in else None,
             "clock_out": today_clock.clock_out.strftime("%H:%M") if today_clock and today_clock.clock_out else None,
         },

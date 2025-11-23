@@ -1,131 +1,155 @@
-import pytz
+# workforce/scheduler.py
 import threading
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.utils import timezone
 from django.utils.timezone import make_aware
+
 from .models import Event
 from .broadcast import broadcast_event
 
 
-# Initialize scheduler
+# --------------------------------------------------------------------
+# GLOBAL SCHEDULER (but not started until start() is called)
+# --------------------------------------------------------------------
 scheduler = BackgroundScheduler(timezone=timezone.get_current_timezone())
 
 
+# --------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------
+weekday_map = {
+    "monday": 0, "tuesday": 1, "wednesday": 2,
+    "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6
+}
+
+
 def get_next_occurrence(day_of_week, event_time):
-    """Return next datetime occurrence for a given weekday/time."""
+    """Return next localized datetime for a weekly recurring event."""
     today = timezone.localdate()
     now = timezone.localtime()
-    weekday_map = {
-        "monday": 0, "tuesday": 1, "wednesday": 2,
-        "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6
-    }
 
-    target = weekday_map[day_of_week.lower()]
-    days_ahead = (target - today.weekday() + 7) % 7
-    # If it's today but the time already passed, move to next week
-    if days_ahead == 0 and event_time and datetime.combine(today, event_time).time() <= now.time():
-        days_ahead = 7
+    target_weekday = weekday_map[day_of_week.lower()]
+    delta = (target_weekday - today.weekday() + 7) % 7
 
-    next_date = today + timedelta(days=days_ahead)
-    next_dt = datetime.combine(next_date, event_time or datetime.min.time())
-    return timezone.make_aware(next_dt)
+    # If event is today but time passed → go to next week
+    if delta == 0:
+        event_dt_today = datetime.combine(today, event_time)
+        event_dt_today = make_aware(event_dt_today)
+        if event_dt_today <= now:
+            delta = 7
+
+    next_date = today + timedelta(days=delta)
+    next_dt = datetime.combine(next_date, event_time)
+    return make_aware(next_dt)
 
 
+# --------------------------------------------------------------------
+# Schedule all events (called on startup + daily refresh)
+# --------------------------------------------------------------------
 def schedule_event_notifications():
-    """
-    Schedule broadcast_event() for all active upcoming events.
-    Handles both fixed-date and weekly recurring events.
-    """
     print("🟡 [Scheduler] schedule_event_notifications() called")
 
     try:
-        # Clear previous jobs to avoid duplicates
         scheduler.remove_all_jobs()
-
         events = Event.objects.filter(is_active=True)
-        print(f"🟢 [Scheduler] Found {events.count()} events to schedule")
+
+        print(f"🟢 [Scheduler] Scheduling {events.count()} events")
 
         now = timezone.now()
 
         for event in events:
-            # --- Regular dated events ---
+
+            # -----------------------------
+            # FIXED DATETIME EVENTS
+            # -----------------------------
             if event.date:
-                event_dt = make_aware(datetime.combine(event.date, event.time))
-                if event_dt <= now:
-                    print(f"⏩ [Scheduler] Skipping past event: {event.name} ({event_dt})")
+                full_dt = make_aware(datetime.combine(event.date, event.time))
+
+                if full_dt <= now:
+                    print(f"⏩ Past fixed event skipped: {event.name}")
                     continue
 
-                run_time = event_dt - timedelta(seconds=45)
+                run_time = full_dt - timedelta(seconds=45)
                 if run_time < now:
                     run_time = now + timedelta(seconds=5)
 
-                job_id = f"attendance_event_{event.id}"
-                print(f"⏰ [Scheduler] Scheduling dated '{event.name}' at {run_time}")
                 scheduler.add_job(
                     broadcast_event,
-                    "date",
+                    trigger="date",
                     run_date=run_time,
                     args=[event],
-                    id=job_id,
+                    id=f"event_fixed_{event.id}",
                     replace_existing=True,
                     misfire_grace_time=30,
                 )
 
-            # --- Weekly recurring events ---
-            elif getattr(event, "is_recurring_weekly", False) and event.day_of_week:
-                next_occurrence = get_next_occurrence(event.day_of_week, event.time)
-                if next_occurrence <= now:
-                    print(f"⏩ [Scheduler] No future time for {event.name}")
+                print(f"⏰ Scheduled: {event.name} → {run_time}")
+                continue
+
+            # -----------------------------
+            # WEEKLY EVENTS
+            # -----------------------------
+            if getattr(event, "is_recurring_weekly", False) and event.day_of_week:
+                next_dt = get_next_occurrence(event.day_of_week, event.time)
+
+                if next_dt <= now:
+                    print(f"⏩ No future weekly occurrence for {event.name}")
                     continue
 
-                run_time = next_occurrence - timedelta(seconds=45)
-                job_id = f"weekly_event_{event.id}"
-                print(f"🔁 [Scheduler] Scheduling weekly '{event.name}' for {run_time}")
+                run_time = next_dt - timedelta(seconds=45)
 
                 scheduler.add_job(
                     broadcast_event,
-                    "date",
+                    trigger="date",
                     run_date=run_time,
                     args=[event],
-                    id=job_id,
+                    id=f"event_weekly_{event.id}",
                     replace_existing=True,
                     misfire_grace_time=30,
                 )
 
+                print(f"🔁 Weekly scheduled: {event.name} → {run_time}")
+
     except Exception as e:
-        print(f"❌ [Scheduler] Error scheduling events: {e}")
+        print(f"❌ [Scheduler] Error scheduling: {e}")
 
 
+# --------------------------------------------------------------------
+# Start scheduler (safe, idempotent, threadsafe)
+# --------------------------------------------------------------------
 def start():
-    """Start scheduler safely in a background thread."""
+    """Start APScheduler in a safe background thread."""
     print("🚀 [Scheduler] start() called")
 
     if getattr(scheduler, "_started", False):
-        print("⚠️ [Scheduler] Already running")
+        print("⚠️ [Scheduler] Already running, skipping start()")
         return
 
-    def run_scheduler():
+    def _run():
         try:
             scheduler.start()
             scheduler._started = True
-            print("✅ [Scheduler] Started successfully")
 
-            # Schedule events after short delay (so DB definitely ready)
+            print("✅ [Scheduler] Started")
+            print(f"🕒 Timezone: {scheduler.timezone}")
+
+            # Schedule once at startup (DB is ready now)
             threading.Timer(2.0, schedule_event_notifications).start()
-            print("✅ [Scheduler] Running with timezone:", scheduler.timezone)
 
-            # 🔁 Auto-refresh every day at 00:10 to catch new weekly recurrences
+            # Daily job refresh at 00:10
             scheduler.add_job(
                 schedule_event_notifications,
-                "cron",
+                trigger="cron",
                 hour=0,
                 minute=10,
-                id="daily_refresh",
-                replace_existing=True
+                id="daily_reschedule",
+                replace_existing=True,
             )
+
+            print("🔁 [Scheduler] Auto-reschedule set for 00:10 daily")
 
         except Exception as e:
             print(f"❌ [Scheduler] Failed to start: {e}")
 
-    threading.Thread(target=run_scheduler, daemon=True).start()
+    threading.Thread(target=_run, daemon=True).start()

@@ -131,7 +131,7 @@ class ChatMessage(models.Model):
 
   # Link preview
   link_url = models.URLField(max_length=500, blank=True, null=True)
-  link_title = models.CharField(max_length=255, blank=True, null=True)
+  link_title = models.TextField(blank=True, null=True)
   link_description = models.TextField(blank=True, null=True)
   link_image = models.URLField(max_length=500, blank=True, null=True)
 

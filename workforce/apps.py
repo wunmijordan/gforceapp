@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.db.models.signals import post_migrate
 
 
 class WorkforceConfig(AppConfig):
@@ -6,45 +7,28 @@ class WorkforceConfig(AppConfig):
     name = "workforce"
 
     def ready(self):
-        from .models import Team
-        from accounts.models import CustomUser
-        from . import scheduler
-        from django.db.utils import OperationalError
-        from django.db import connections
-        from django.db.models.signals import post_migrate
-        import threading, time
+        """
+        Safe AppConfig:
+        - No model imports at module load
+        - No scheduler start here (prevents random reload loops)
+        - Only connects signals
+        """
 
-        # ---- 1️⃣ Create default teams after migrations ----
-        def create_default_teams(sender=None, **kwargs):
+        # ---- Create default teams AFTER migrations ----
+        def create_default_teams(sender, **kwargs):
+            from accounts.models import CustomUser
+            from .models import Team
+
             dept_names = [choice[0] for choice in CustomUser.DEPARTMENT_CHOICES]
-            for name in dept_names + ["Minister", "Magnet", "Service Production", "Security"]:
+
+            required = dept_names + [
+                "Minister",
+                "Magnet",
+                "Service Production",
+                "Security",
+            ]
+
+            for name in required:
                 Team.objects.get_or_create(name=name)
 
         post_migrate.connect(create_default_teams, sender=self)
-
-        # ---- 2️⃣ Safe scheduler startup ----
-        def start_scheduler_safely():
-            """Wait until DB is ready, create default teams if missing, then start scheduler."""
-            for _ in range(10):
-                try:
-                    connections["default"].cursor()  # just checks DB connection
-                    break
-                except OperationalError:
-                    print("⏳ [Scheduler] Waiting for DB...")
-                    time.sleep(1)
-            else:
-                print("❌ [Scheduler] DB not ready, aborting scheduler startup.")
-                return
-
-            # Ensure default teams exist
-            if not Team.objects.exists():
-                create_default_teams()
-
-            # Start scheduler once
-            if not getattr(scheduler, "_started", False):
-                scheduler.start()
-                scheduler._started = True
-
-        # Run scheduler in a separate thread to avoid sync DB in async context
-        threading.Thread(target=start_scheduler_safely, daemon=True).start()
-
