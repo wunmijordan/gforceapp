@@ -46,7 +46,7 @@
         </div>
       </div>
     </div>
-    <div class="container-xl mt-4">
+    <!--<div class="container-xl mt-4">
       <div class="row g-2 justify-content-center">
         {% comment %} ─────────────── SUPERUSER + PROJECT ADMINS SEE EVERYONE ─────────────── {% endcomment %}
         {% if request.user.is_superuser or request.user|is_project_admin %}
@@ -67,7 +67,7 @@
             {% if user_teams|length == 1 %}
               {# ───────────── SINGLE TEAM USER ───────────── #}
               <div class="w-full mx-auto relative mb-4">
-                <!-- Team name overlay -->
+                <!-- Team name overlay --
                 <span class="team-name-overlay {{ team.color_class|default:'bg-dark-lt' }}">{{ team.name }}</span>
                 <div class="scroll-wrapper">
                   <ul class="scroll-track" data-direction="left">
@@ -84,7 +84,7 @@
               {# ───────────── MULTIPLE TEAMS ───────────── #}
               {% for team, members in team_member_pairs %}
                 <div class="w-full mx-auto relative mb-1 scroll-container">
-                  <!-- Team name overlay -->
+                  <!-- Team name overlay --
                   <span class="team-name-overlay {{ team.color_class|default:'bg-dark-lt' }}">{{ team.name }}</span>
 
                   <div class="scroll-wrapper">
@@ -101,7 +101,7 @@
           {% endwith %}
         {% endif %}
       </div>
-    </div>
+    </div>-->
   </div>
   <!-- END PAGE HEADER -->
 
