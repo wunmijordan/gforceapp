@@ -367,15 +367,106 @@ def upload_file(request):
 
 
 
+import requests
+from urllib.parse import urlparse
+
+YOUTUBE_OEMBED = "https://www.youtube.com/oembed?format=json&url="
+
+def is_youtube(url):
+    host = urlparse(url).netloc.lower()
+    return "youtube.com" in host or "youtu.be" in host
+
+def extract_youtube_id(url):
+    try:
+        u = urlparse(url)
+        path = u.path
+
+        # youtu.be/<id>
+        if "youtu.be" in u.netloc:
+            return path.lstrip("/")
+
+        # /watch?v=<id>
+        qs = urllib.parse.parse_qs(u.query)
+        if "v" in qs:
+            return qs.get("v", [None])[0]
+
+        # /shorts/<id>
+        if path.startswith("/shorts/"):
+            return path.split("/")[2]
+
+        # /embed/<id>
+        if path.startswith("/embed/"):
+            return path.split("/")[2]
+
+        # /live/<id>
+        if path.startswith("/live/"):
+            return path.split("/")[2]
+
+        return None
+    except:
+        return None
+
+def get_best_youtube_thumb(video_id):
+    base = f"https://i.ytimg.com/vi/{video_id}"
+    candidates = [
+        "maxresdefault.jpg",
+        "sddefault.jpg",
+        "hqdefault.jpg",
+        "mqdefault.jpg",
+        "default.jpg",
+    ]
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    for file in candidates:
+        url = f"{base}/{file}"
+
+        try:
+            r = requests.head(url, timeout=3, headers=headers)
+            if r.status_code == 200:
+                return url
+        except:
+            pass
+
+    # Absolute fallback
+    return f"{base}/default.jpg"
+
 @csrf_exempt
 def fetch_link_preview(request):
     url = request.GET.get("url")
     if not url:
         return JsonResponse({"error": "Missing URL"}, status=400)
 
+    # --- YOUTUBE SPECIAL HANDLER FIRST ---
+    if is_youtube(url):
+        vid = extract_youtube_id(url)
+        if vid:
+            # Try oEmbed only for the title
+            meta_title = ""
+            try:
+                r = requests.get(
+                    f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={vid}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=5
+                )
+                if r.status_code == 200:
+                    meta_title = r.json().get("title", "")
+            except:
+                pass
+
+            return JsonResponse({
+                "url": url,
+                "title": meta_title or "YouTube Video",
+                "description": "",
+                "image": get_best_youtube_thumb(vid),  # 👈 upgraded thumbnail
+                "provider": "youtube"
+            })
+
+    # --- NORMAL OG SCRAPER FALLBACK ---
     try:
         r = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
         r.raise_for_status()
+
         soup = BeautifulSoup(r.text, "html.parser")
 
         title_tag = soup.find("meta", property="og:title") or soup.find("title")
@@ -384,18 +475,32 @@ def fetch_link_preview(request):
 
         return JsonResponse({
             "url": url,
-            "title": title_tag["content"] if title_tag and title_tag.has_attr("content") else (title_tag.string if title_tag else ""),
-            "description": desc_tag["content"] if desc_tag and desc_tag.has_attr("content") else "",
-            "image": image_tag["content"] if image_tag and image_tag.has_attr("content") else "",
+            "title": (
+                title_tag["content"]
+                if title_tag and title_tag.has_attr("content")
+                else (title_tag.string if title_tag else "")
+            ),
+            "description": (
+                desc_tag["content"]
+                if desc_tag and desc_tag.has_attr("content")
+                else ""
+            ),
+            "image": (
+                image_tag["content"]
+                if image_tag and image_tag.has_attr("content")
+                else ""
+            ),
         })
+
     except Exception as e:
         return JsonResponse({
             "url": url,
-            "title": url,  # fallback
+            "title": url,
             "description": "",
             "image": "",
             "error": str(e)
         }, status=200)
+
 
 
 
@@ -437,7 +542,7 @@ def attendance_summary(request):
                 "event": r.event.name if r.event else "—",
                 "team": (r.event.team.name if r.event and r.event.team else r.team.name)
                         if (r.event or r.team) else "—",
-                "user": f"{(r.user.title or '')} {r.user.get_full_name()}".strip(),
+                "user": f"{(r.user.title or '')} {r.user.full_name}",
                 "status": r.status,
                 "remarks": r.remarks or "—",
                 "clock_in": r.clock_in_time or "—",

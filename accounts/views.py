@@ -339,8 +339,6 @@ def admin_dashboard(request):
         members = [u for u in other_users if u.team_memberships.filter(team=team).exists()]
         team_member_pairs.append((team, members))  
     
-
-        
     calendar_items = get_calendar_items(request.user)
     records = get_visible_attendance_records(request.user, since_date=last_30_days)
     clock_records = get_visible_clock_records(request.user, since_date=last_30_days)
@@ -949,6 +947,16 @@ def clock_action(request):
         "clock_out": clock.clock_out.strftime("%H:%M") if clock.clock_out else None,
     })
 
+def attendance_check(request):
+    user = request.user
+    event_id = request.GET.get("event_id")
+
+    clock = ClockRecord.objects.filter(user=user, event_id=event_id).first()
+
+    return JsonResponse({
+        "clock_in": bool(clock and clock.clock_in),
+        "clock_out": bool(clock and clock.clock_out),
+    })
 
 
 

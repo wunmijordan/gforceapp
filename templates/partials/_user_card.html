@@ -5,11 +5,14 @@
         <a href="tel:{{ user.phone_number }}" title="{{ user.title|default:'' }} {{ user.full_name }}">
           {% if user.image %}
             <span class="avatar rounded"
-                  style="background-image: url('{{ user.image.url }}'); width:40px; height:40px; background-size:cover; background-position:center;">
+                  style="background-image: url('{{ user.image.url }}'); width:30px; height:30px; 
+                          background-size:cover; background-position:center;
+                          box-shadow: 0 4px 8px #000000d2;">
             </span>
           {% else %}
             <span class="avatar bg-gray text-white d-flex align-items-center justify-content-center rounded"
-                  style="width:40px; height:40px; font-weight:bold; font-size:12px;">
+                  style="width:30px; height:30px; font-weight:bold; font-size:12px;
+                          box-shadow: 0 4px 8px #000000d2;">
               {{ user.initials }}
             </span>
           {% endif %}

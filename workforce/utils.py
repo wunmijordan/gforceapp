@@ -14,22 +14,131 @@ from geopy.distance import distance
 from django.core.exceptions import ValidationError
 
 
-def get_link_preview(url):
+import requests
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+
+YOUTUBE_OEMBED = "https://www.youtube.com/oembed?format=json&url="
+
+def is_youtube(url):
+    host = urlparse(url).netloc.lower()
+    return "youtube.com" in host or "youtu.be" in host
+
+def extract_youtube_id(url):
     try:
-        resp = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        u = urlparse(url)
+        path = u.path
+
+        # youtu.be/<id>
+        if "youtu.be" in u.netloc:
+            return path.lstrip("/")
+
+        # /watch?v=<id>
+        qs = urllib.parse.parse_qs(u.query)
+        if "v" in qs:
+            return qs.get("v", [None])[0]
+
+        # /shorts/<id>
+        if path.startswith("/shorts/"):
+            return path.split("/")[2]
+
+        # /embed/<id>
+        if path.startswith("/embed/"):
+            return path.split("/")[2]
+
+        # /live/<id>
+        if path.startswith("/live/"):
+            return path.split("/")[2]
+
+        return None
+    except:
+        return None
+
+def get_best_youtube_thumb(video_id):
+    base = f"https://i.ytimg.com/vi/{video_id}"
+    candidates = [
+        "maxresdefault.jpg",
+        "sddefault.jpg",
+        "hqdefault.jpg",
+        "mqdefault.jpg",
+        "default.jpg",
+    ]
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    for file in candidates:
+        url = f"{base}/{file}"
+
+        try:
+            r = requests.head(url, timeout=3, headers=headers)
+            if r.status_code == 200:
+                return url
+        except:
+            pass
+
+    # Absolute fallback
+    return f"{base}/default.jpg"
+
+def get_link_preview(url):
+    """Unified YouTube + OG preview for WebSockets."""
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    # ---------- YOUTUBE SPECIAL HANDLING ----------
+    if is_youtube(url):
+        vid = extract_youtube_id(url)
+        if vid:
+            meta_title = ""
+            try:
+                r = requests.get(
+                    f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={vid}",
+                    headers=headers,
+                    timeout=5,
+                )
+                if r.status_code == 200:
+                    meta_title = r.json().get("title", "")
+            except:
+                pass
+
+            return {
+                "url": url,
+                "title": meta_title or "YouTube Video",
+                "description": "",
+                "image": get_best_youtube_thumb(vid),
+                "provider": "youtube",
+            }
+
+    # ---------- NORMAL OG WEBSITE PREVIEW ----------
+    try:
+        resp = requests.get(url, headers=headers, timeout=5)
+        resp.raise_for_status()
+
         soup = BeautifulSoup(resp.text, "html.parser")
-        title = soup.find("meta", property="og:title") or soup.find("title")
-        desc = soup.find("meta", property="og:description") or soup.find("meta", attrs={"name": "description"})
-        image = soup.find("meta", property="og:image")
+
+        title_tag = soup.find("meta", property="og:title") or soup.find("title")
+        desc_tag = soup.find("meta", property="og:description") or soup.find("meta", attrs={"name": "description"})
+        image_tag = soup.find("meta", property="og:image")
+
+        title = (
+            title_tag["content"]
+            if title_tag and title_tag.has_attr("content")
+            else (title_tag.string if title_tag else "")
+        )
 
         return {
             "url": url,
-            "title": title["content"] if title and title.has_attr("content") else (title.text if title else ""),
-            "description": desc["content"] if desc and desc.has_attr("content") else "",
-            "image": image["content"] if image and image.has_attr("content") else "",
+            "title": title,
+            "description": desc_tag["content"] if desc_tag and desc_tag.has_attr("content") else "",
+            "image": image_tag["content"] if image_tag and image_tag.has_attr("content") else "",
         }
-    except Exception:
-        return {"url": url, "title": url, "description": "", "image": ""}
+
+    except:
+        return {
+            "url": url,
+            "title": url,
+            "description": "",
+            "image": "",
+        }
+
 
 
 def build_mention_helpers():
@@ -528,11 +637,13 @@ def get_visible_attendance_records(user, since_date=None):
             Q(event__team_id__in=team_ids) | Q(team_id__in=team_ids)
         ).exclude(
             user__is_superuser=True
-        ).exclude(
-            user__groups__name__in=["Pastor", "Admin"]
         )
+        records = [
+            r for r in records 
+            if not is_project_admin(r.user)
+        ]
 
-        return records.distinct()
+        return records
 
     # Default: no access
     return AttendanceRecord.objects.none()
@@ -565,15 +676,15 @@ def get_visible_clock_records(user, since_date=None):
             team_memberships__team_id__in=team_ids
         ).exclude(
             is_superuser=True
-        ).exclude(
-            groups__name__in=["Pastor", "Admin"]
-        ).distinct()
-
+        )
         records = base_qs.filter(
             Q(user__in=team_users) | Q(team_id__in=team_ids) | Q(event__team_id__in=team_ids)
         )
+        project_admin_ids = [
+            u.id for u in CustomUser.objects.all() if is_project_admin(u)
+        ]
 
-        return records.distinct()
+        return records.exclude(user_id__in=project_admin_ids)
 
     # Default: no access
     return ClockRecord.objects.none()

@@ -44,14 +44,10 @@
 /* ============================
    3. Button hover styles
    ============================ */
-.btn-primary:hover {
-  background-color: #ff5733 !important;  /* New hover background */
-  border-color: #292828 !important;      /* Optional: border color */
-}
-
 .btn:hover {
-  background-color: #fda103 !important;  /* Orange */
+  background-color: #f59f0033 !important;  /* Orange */
   color: white !important;               /* Keep text visible */
+  border-color: #292828 !important;
 }
 
 
@@ -619,11 +615,12 @@
   transform: translateY(-50%);
   z-index: 20; /* above the marquee track */
   font-size: 0.6rem;
-  background: rgba(0, 0, 0, 0.616); /* semi-transparent for readability */
+  background: #1F2937; /* semi-transparent for readability */
   color: white;
+  box-shadow: 0 4px 8px #000000d2;
   font-style: italic;
   padding: 0.15rem 0.5rem;
-  border-radius: 6px;
+  border-radius: 12px;
   white-space: nowrap;
   pointer-events: none; /* allow scrolling behind it */
 }
@@ -781,6 +778,47 @@
 }
 
 .new-badge-gradient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px; /* border thickness */
+  border-radius: inherit;
+  background: linear-gradient(90deg, 
+    #f59f008c, 
+    #394255, 
+    #ffd04d, 
+    #f97316, 
+    #14f50088);
+  background-size: 400% 400%;
+  animation: borderflow 6s linear infinite;
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  /* Standard mask for non-WebKit browsers */
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  z-index: -1;
+}
+
+@keyframes borderflow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 400% 50%;
+  }
+}
+
+
+/* New Guest Badge */
+.chat-room-banner-gradient {
+  position: relative;
+  display: inline-block;
+  z-index: 0;
+}
+
+.chat-room-banner-gradient::before {
   content: "";
   position: absolute;
   inset: 0;

@@ -13,7 +13,7 @@
       <div class="row g-2 align-items-center">
         <div class="col">
           <!-- Dynamic Page Title -->
-          <kbd class="bg-success-lt"><h2 class="page-title">{{ page_title }}</h2></kbd>
+          <kbd class="bg-indigo-lt"><h2 class="page-title">{{ page_title }}</h2></kbd>
         </div>
 
         <!-- Page title actions -->
@@ -43,7 +43,7 @@
         {% endif %}
       </div>
     </div>
-    <div class="container-xl mt-4">
+    <!--<div class="container-xl mt-4">
       <div class="row g-2 justify-content-center">
         {% comment %} ─────────────── SUPERUSER + PROJECT ADMINS SEE EVERYONE ─────────────── {% endcomment %}
         {% if request.user.is_superuser or request.user|is_project_admin %}
@@ -64,7 +64,7 @@
             {% if user_teams|length == 1 %}
               {# ───────────── SINGLE TEAM USER ───────────── #}
               <div class="w-full mx-auto relative mb-4">
-                <!-- Team name overlay -->
+                <!-- Team name overlay --
                 <span class="team-name-overlay {{ team.color_class|default:'bg-dark-lt' }}">{{ team.name }}</span>
                 <div class="scroll-wrapper">
                   <ul class="scroll-track" data-direction="left">
@@ -81,7 +81,7 @@
               {# ───────────── MULTIPLE TEAMS ───────────── #}
               {% for team, members in team_member_pairs %}
                 <div class="w-full mx-auto relative scroll-container">
-                  <!-- Team name overlay -->
+                  <!-- Team name overlay --
                   <span class="team-name-overlay {{ team.color_class|default:'bg-dark-lt' }}">{{ team.name }}</span>
 
                   <div class="scroll-wrapper">
@@ -98,7 +98,7 @@
           {% endwith %}
         {% endif %}
       </div>
-    </div>
+    </div>-->
 
   </div>
   <!-- END PAGE HEADER -->
@@ -116,7 +116,7 @@
               <span style="font-size: 3rem; font-weight: bold; line-height: 1.1;">
                 <small style="font-size: 1.5rem; font-style: italic;">{{ request.user.title|default:"" }}</small><br> {{ request.user.full_name }}
               </span>
-              <div class="d-flex flex-wrap gap-2 mt-4 mb-2 justify-content-start">
+              <!--<div class="d-flex flex-wrap gap-2 mt-4 mb-2 justify-content-start">
                 {% if not request.user|is_project_admin %}
                   {% with memberships=user.team_memberships.all %}
                     {% if memberships %}
@@ -135,6 +135,60 @@
                           </span>
                         {% endif %}
                       {% endfor %}
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
+              </div>-->
+              <div class="row g-2 justify-content-center">
+                {% comment %} ─────────────── SUPERUSER + PROJECT ADMINS SEE EVERYONE ─────────────── {% endcomment %}
+                {% if request.user.is_superuser or request.user|is_project_admin %}
+                  <div class="w-full mx-auto relative mb-4">
+                    <div class="scroll-wrapper">
+                      <ul class="scroll-track" data-direction="left">
+                        {% for user in other_users %}
+                          {% if user != request.user %}
+                            {% include "partials/_user_card.html" with user=user %}
+                          {% endif %}
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  </div>
+
+                {% else %}
+                  {% with memberships=request.user.team_memberships.all %}
+                    {% if user_teams|length == 1 %}
+                      {# ───────────── SINGLE TEAM USER ───────────── #}
+                      <div class="w-full mx-auto relative mb-4">
+                        <!-- Team name overlay -->
+                        <span class="team-name-overlay {{ team.color_class }}" style="background: #1F2937;">{{ team.name }}</span>
+                        <div class="scroll-wrapper">
+                          <ul class="scroll-track" data-direction="left">
+                            {% for member in other_users %}
+                              {% if member != request.user %}
+                                {% include "partials/_user_card.html" with user=member %}
+                              {% endif %}
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+
+                    {% elif user_teams|length > 1 %}
+                      {# ───────────── MULTIPLE TEAMS ───────────── #}
+                      {% for team, members in team_member_pairs %}
+                        <div class="w-full mx-auto relative scroll-container">
+                          <!-- Team name overlay -->
+                          <span class="team-name-overlay {{ team.color_class }}" style="background: #1F2937;">{{ team.name }}</span>
+
+                          <div class="scroll-wrapper">
+                            <ul class="scroll-track" data-direction="{% cycle 'left' 'right' %}">
+                              {% for member in members %}
+                                {% include "partials/_user_card.html" with user=member %}
+                              {% endfor %}
+                            </ul>
+                          </div>
+                        </div>
+                      {% endfor %}
+
                     {% endif %}
                   {% endwith %}
                 {% endif %}
@@ -1888,9 +1942,31 @@ document.addEventListener("DOMContentLoaded", function () {
   let activeCountdownTimer = null;
   let proximityCheckTimer = null;
 
+  async function checkExistingAttendance(eventId) {
+    try {
+      const res = await fetch(`/accounts/attendance/check/?event_id=${eventId}`);
+      const data = await res.json();
+
+      const clockOutBtn = document.querySelector(".mark-btn[data-status='clock_out']");
+
+      if (data.clock_in && !data.clock_out) {
+        // User already clocked in → show clock-out button
+        clockOutBtn.classList.remove("d-none");
+        attendanceMarked[eventId] = true;
+      } else {
+        // No clock-in or already clocked-out → hide button
+        clockOutBtn.classList.add("d-none");
+        attendanceMarked[eventId] = false;
+      }
+    } catch (err) {
+      console.error("Error checking attendance state:", err);
+    }
+  }
+
   // --- EVENT SELECTION ---
   function selectEvent(eventData) {
     window.currentEvent = eventData;
+    checkExistingAttendance(eventData.id);
 
     clockSection.style.display = "none";
     eventModeSection.style.display = "block";
@@ -1928,13 +2004,13 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     // --- Clock Out Button Visibility ---
-    const clockOutBtn = document.querySelector(".mark-btn[data-status='clock_out']");
-    if (clockOutBtn) {
-      clockOutBtn.classList.add("d-none"); // hide by default
-      if (attendanceMarked[eventData.id]) {
-        clockOutBtn.classList.remove("d-none"); // show if attendance was marked
-      }
-    }
+    //const clockOutBtn = document.querySelector(".mark-btn[data-status='clock_out']");
+    //if (clockOutBtn) {
+    //  clockOutBtn.classList.add("d-none"); // hide by default
+    //  if (attendanceMarked[eventData.id]) {
+    //    clockOutBtn.classList.remove("d-none"); // show if attendance was marked
+    //  }
+    //}
 
     // --- Countdown Setup ---
     let targetTime = null;

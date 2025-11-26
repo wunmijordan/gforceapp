@@ -203,10 +203,12 @@
       </div>
 
       <!-- Mobile Navbar menu: scrollable -->
-      <div class="navbar-collapse collapse" id="navbar-menu" style="max-height:50vh; overflow-y:auto;">
+      <div class="navbar-collapse collapse" data-bs-auto-close="outside" id="navbar-menu" style="max-height:50vh; overflow-y:auto;">
         <ul class="navbar-nav">
           <!-- Logo inside input (left) -->
-          <li class="nav-item align-items-center m-0 p-0">
+        
+          <!-- Team Buttons Strip -->
+          <li class="nav-item mt-2">
             {% if request.user|is_project_wide_admin %}
               <a class="nav-link text-white" href="{% url 'accounts:admin_dashboard' %}">
                 <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
@@ -231,39 +233,73 @@
               </a>
             {% endif %}
           </li>
-          <!-- Team Buttons Strip -->
-          <li class="nav-item mt-2">
-            <div id="teamSelector" class="team-selector d-flex flex-column mb-3">
-              {% for team in teams %}
-                <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
-                        data-team-id="{{ team.id }}"
-                        data-team-color-class="{{ team.color_class }}"
-                        data-team-name="{{ team.name }}">
-                  <!-- Inactive icon (visible when NOT active) -->
-                  <svg class="team-icon team-icon-inactive"
-                      xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
-                    <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" />
-                    <path d="M21 7h-7m3 -3l-3 3l3 3" />
+          <li class="nav-item">
+            {% if request.user|in_team:"Magnet" %}
+              <a class="nav-link text-white" href="{% url 'guest_list' %}">
+                <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                  <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff5e01ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-users">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" /><path d="M21 21v-2a4 4 0 0 0 -3 -3.85" />
                   </svg>
+                </span>
+                <span class="nav-link-title"> Guests </span>
+              </a>
+            {% endif %}
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-white fs-4" href="#" id="chatroomsToggle">
+              <span class="nav-link-icon d-md-none d-lg-inline-block">
+                <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#f703d7ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-armchair">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M5 11a2 2 0 0 1 2 2v2h10v-2a2 2 0 1 1 4 0v4a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z" />
+                  <path d="M5 11v-5a3 3 0 0 1 3 -3h8a3 3 0 0 1 3 3v5" />
+                  <path d="M6 19v2" /><path d="M18 19v2" />
+                </svg>
+              </span>
+              <span class="nav-link-title"> My ChatRooms </span>
+            </a>
+            <div id="chatroomsContainer" class="chatrooms-collapsible" style="display:none; background: #1F2937 !important; border: none; width: 100%;">
+              <div id="teamSelector" class="team-selector d-flex flex-column mb-3 px-2">
+                {% for team in teams %}
+                  <button class="team-btn text-white border-0 py-2 px-3 text-center w-100 {{ team.color_class }} position-relative"
+                          data-team-id="{{ team.id }}"
+                          data-team-color-class="{{ team.color_class }}"
+                          data-team-name="{{ team.name }}">
 
-                  {{ team.name }} ChatRoom
+                    <!-- Inactive icon -->
+                    <svg class="team-icon team-icon-inactive btn-animate-icon" style="position:absolute; left:8px; top:50%; transform:translateY(-50%);"
+                        xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M13 12v.01" />
+                      <path d="M3 21h18" />
+                      <path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" />
+                      <path d="M21 7h-7m3 -3l-3 3l3 3" />
+                    </svg>
 
-                  <!-- Active icon (visible only when active) -->
-                  <svg class="team-icon team-icon-active"
-                      xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
-                    <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h7.5m2.5 10.5v7.5" />
-                    <path d="M14 7h7m-3 -3l3 3l-3 3" />
-                  </svg>
-                </button>
-              {% endfor %}
+                    {{ team.name }}
+
+                    <!-- Active icon -->
+                    <svg class="team-icon team-icon-active btn-animate-icon btn-animate-icon-move-start" style="position:absolute; right:8px; top:50%; transform:translateY(-50%);"
+                        xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M13 12v.01" />
+                      <path d="M3 21h18" />
+                      <path d="M5 21v-16a2 2 0 0 1 2 -2h7.5m2.5 10.5v7.5" />
+                      <path d="M14 7h7m-3 -3l3 3l-3 3" />
+                    </svg>
+
+                  </button>
+                {% endfor %}
+              </div>
+
             </div>
           </li>
+
+            
         </ul>
       </div>
     </div>
@@ -276,18 +312,18 @@
 
           <!-- DESKTOP LEFT COLUMN -->
           <div class="d-none d-lg-flex col-12 col-lg-5 col-xl-3 border-end flex-column" style="display:flex; flex-direction:column; height:100%;">
-            <div class="card-header my-2 py-1 justify-content-center align-items-center border-0 sticky-top">
+            <div class="card-header my-2 p-2 justify-content-center align-items-center border-0 sticky-top">
               <!-- Back button (desktop only) -->
-              <a class="link-secondary p-0 me-2 d-flex chat-back-btn" style="color:white;">
-                <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-chevrons-left">
+              <a class="link-secondary p-0 ms-2 me-auto d-flex chat-back-btn animate-icon-move-start" style="color:white;">
+                <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff5e01ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-chevrons-left">
                   <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                   <path d="M11 7l-5 5l5 5" /><path d="M17 7l-5 5l5 5" />
                 </svg>
               </a>
               <!-- Avatar -->
-              <span class="d-flex align-items-center justify-content-center" style="width:40px; height:40px;">
+              <span class="d-flex me-2 gap-2 align-items-center justify-content-center" style="width:40px; height:40px;">
                 {% if request.user|is_project_wide_admin %}
-                  <a class="nav-link text-white" href="{% url 'accounts:admin_dashboard' %}">
+                  <a class="nav-link text-white animate-icon-pulse" href="{% url 'accounts:admin_dashboard' %}">
                     <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0066ffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
                         <path d="M5 12l-2 0l9 -9l9 9l-2 0"></path>
@@ -307,10 +343,20 @@
                     </span>
                   </a>
                 {% endif %}
+                {% if request.user|in_team:"Magnet" %}
+                  <a class="nav-link text-white" href="{% url 'guest_list' %}">
+                    <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
+                      <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff5e01ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-users">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" /><path d="M21 21v-2a4 4 0 0 0 -3 -3.85" />
+                      </svg>
+                    </span>
+                  </a>
+                {% endif %}
               </span>
 
-              <!-- Text -->
-              <kbd class="bg-warning-lt"><h5>A People <em>Helped</em> By God!</h5></kbd>
+              <!-- Text 
+              <kbd class="bg-warning-lt"><h5>A People <em>Helped</em> By God!</h5></kbd>-->
             </div>
             <!-- Desktop User list -->
             <div class="card-body p-0 mt-0 mb-3 scrollable flex-fill">
@@ -318,28 +364,27 @@
                 <!-- Team Buttons Strip -->
                 <div id="teamSelector" class="team-selector d-flex flex-column mb-3">
                   {% for team in teams %}
-                    <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }}"
+                    <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }} position-relative"
                             data-team-id="{{ team.id }}"
                             data-team-color-class="{{ team.color_class }}"
                             data-team-name="{{ team.name }}">
 
                       <!-- Inactive icon (visible when NOT active) -->
-                      <svg class="team-icon team-icon-inactive"
-                          xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
+                          class="team-icon team-icon-inactive team-icon-animate-icon icon icon-tabler icons-tabler-outline icon-tabler-door-enter"
+                          style="position:absolute; left:8px; top:50%; transform:translateY(-50%);">
                         <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
                         <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h6m4 10.5v7.5" />
                         <path d="M21 7h-7m3 -3l-3 3l3 3" />
                       </svg>
 
-                      {{ team.name }} ChatRoom
+                      {{ team.name }}
 
                       <!-- Active icon (visible only when active) -->
-                      <svg class="team-icon team-icon-active"
-                          xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round">
+                      
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
+                          class="team-icon team-icon-active team-icom-animate-icon btn-animate-icon-move-start icon icon-tabler icons-tabler-outline icon-tabler-door-exit"
+                          style="position:absolute; right:8px; top:50%; transform:translateY(-50%);">
                         <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 12v.01" />
                         <path d="M3 21h18" /><path d="M5 21v-16a2 2 0 0 1 2 -2h7.5m2.5 10.5v7.5" />
                         <path d="M14 7h7m-3 -3l3 3l-3 3" />
@@ -349,49 +394,7 @@
                 </div>
 
                 <!-- Users Display Area -->
-                <div id="teamUsersContainer">
-                  {% for team in teams %}
-                    <div id="team-users-{{ team.id }}" class="team-users d-none">
-                      {% for user in team.enriched_users %}
-                        <div class="card shadow-sm border-0 mb-2 {{ user.color }} user-card">
-                          <div class="card-body py-2 px-3 d-flex align-items-center">
-                            <!-- Avatar -->
-                            <div class="me-3">
-                              <a href="tel:{{ user.phone_number }}">
-                                {% if user.image %}
-                                  <span class="avatar rounded"
-                                        style="background-image:url('{{ user.image }}');
-                                              width:40px; height:40px;
-                                              background-size:cover;
-                                              background-position:center;">
-                                  </span>
-                                {% else %}
-                                  <span class="avatar d-flex align-items-center justify-content-center rounded text-white fw-bold"
-                                        style="width:40px; height:40px; font-size:0.9rem;">
-                                    {{ user.initials }}
-                                  </span>
-                                {% endif %}
-                              </a>
-                            </div>
-
-                            <!-- Name + Last Message -->
-                            <div class="flex-grow-1">
-                              <div class="fw-bold text-truncate"
-                                  style="color: var(--tblr-{{ user.color }});">
-                                {{ user.title|default:"" }} {{ user.full_name }}
-                              </div>
-                              <div id="last-message-{{ user.id }}"
-                                  class="text-secondary fst-italic text-truncate"
-                                  style="font-size:0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                {{ user.last_message|default:"No messages yet"|truncatechars:30 }}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      {% endfor %}
-                    </div>
-                  {% endfor %}
-                </div>
+                
               </div>
             </div>
           </div>
@@ -804,6 +807,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // Use existing DOM container with id="pinnedPreview" if present
   const pinnedPreviewContainer = document.getElementById('pinnedPreview') || document.querySelector('.pinned-preview');
 
+  const toggle = document.getElementById("chatroomsToggle");
+  const chatroomsBox = document.getElementById("chatroomsContainer");
+
+  toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      const isHidden = chatroomsBox.style.display === "none";
+
+      // Toggle visibility instantly
+      chatroomsBox.style.display = isHidden ? "block" : "none";
+
+      if (isHidden) {
+          scrollToActiveTeam();
+      }
+  });
+
+  // Auto-scroll to active team
+  function scrollToActiveTeam() {
+    const activeBtn = teamSelector.querySelector(".active-team");
+
+    if (activeBtn) {
+        setTimeout(() => {
+            activeBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 50);
+    }
+  }
+
   document.querySelectorAll(".chat-back-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const fromLogin = document.referrer.includes("/accounts/login");
@@ -990,7 +1019,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const banner = document.createElement("div");
   banner.id = "chatRoomBanner";
-  banner.className = "chat-room-banner";
+  banner.className = "chat-room-banner chat-room-banner-gradient";
   banner.innerHTML = `<div class="banner-inner"><span class="banner-text">GForce ChatRoom</span></div>`;
   chatContainer.prepend(banner);
 
@@ -1193,19 +1222,19 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateBanner(teamName, colorClass = null) {
     if (!banner) return;
 
-    banner.className = "chat-room-banner";
+    banner.className = "chat-room-banner chat-room-banner-gradient";
     const textEl = banner.querySelector(".banner-text");
     if (!textEl) return;
 
     if (!teamName) {
-      textEl.innerText = "Welcome back to GForce ChatRoom";
+      textEl.innerHTML = `<span>Welcome back to GForce ChatRoom   ——   A People <em>Helped</em> By God!</span>`;
       banner.style.background = "#111827";
       banner.style.color = "#f59f00";
     } else {
-      textEl.innerText = `${teamName} ChatRoom`;
+      textEl.innerHTML = `<span>${teamName} ChatRoom   ——   A People <em>Helped</em> By God!</span>`;
 
       if (colorClass) {
-        banner.className = "chat-room-banner"; // reset
+        banner.className = "chat-room-banner chat-room-banner-gradient"; // reset
         banner.classList.add(...colorClass.split(" "));
         banner.style.background = "none"; // allow class color
         banner.style.color = "";
@@ -1260,10 +1289,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="fw-bold text-truncate" style="color: var(--tblr-${u.color});">
             ${u.title || ""} ${u.full_name}
           </div>
-          <div class="text-secondary fst-italic text-truncate"
-              style="font-size:0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${u.last_message || "No messages yet"}
-          </div>
+          
         </div>
       </div>
     </div>
@@ -1292,6 +1318,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.innerWidth <= 767) {
           const navbarMenu = document.getElementById("navbar-menu");
           const navbarToggler = document.querySelector(".navbar-toggler");
+
+          // 1️⃣ Close the chatrooms toggle first
+          if (chatroomsBox && chatroomsBox.style.display === "block") {
+            chatroomsBox.style.display = "none";
+          }
+
+          // 2️⃣ Now close the mobile navbar
           if (navbarMenu && navbarMenu.classList.contains("show")) {
             const collapse =
               bootstrap.Collapse.getInstance(navbarMenu) ||

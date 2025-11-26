@@ -18,4 +18,5 @@ urlpatterns = [
     path("ajax/load-roles/", views.load_roles, name="ajax_load_roles"),
     path("attendance/summary/", views.attendance_summary, name="attendance_summary"),
     path("attendance/clock/", views.clock_action, name="clock_action"),
+    path("attendance/check/", views.attendance_check, name="attendance_check"),
 ]
