@@ -394,7 +394,49 @@
                 </div>
 
                 <!-- Users Display Area -->
-                
+                <div id="teamUsersContainer">
+                  {% for team in teams %}
+                    <div id="team-users-{{ team.id }}" class="team-users d-none">
+                      {% for user in team.enriched_users %}
+                        <div class="card shadow-sm border-0 mb-2 {{ user.color }} user-card">
+                          <div class="card-body py-2 px-3 d-flex align-items-center">
+                            <!-- Avatar -->
+                            <div class="me-3">
+                              <a href="tel:{{ user.phone_number }}">
+                                {% if user.image %}
+                                  <span class="avatar rounded"
+                                        style="background-image:url('{{ user.image }}');
+                                              width:40px; height:40px;
+                                              background-size:cover;
+                                              background-position:center;">
+                                  </span>
+                                {% else %}
+                                  <span class="avatar d-flex align-items-center justify-content-center rounded text-white fw-bold"
+                                        style="width:40px; height:40px; font-size:0.9rem;">
+                                    {{ user.initials }}
+                                  </span>
+                                {% endif %}
+                              </a>
+                            </div>
+
+                            <!-- Name + Last Message -->
+                            <div class="flex-grow-1">
+                              <div class="fw-bold text-truncate"
+                                  style="color: var(--tblr-{{ user.color }});">
+                                {{ user.title|default:"" }} {{ user.full_name }}
+                              </div>
+                              <!--<div id="last-message-{{ user.id }}"
+                                  class="text-secondary fst-italic text-truncate"
+                                  style="font-size:0.65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {{ user.last_message|default:"No messages yet"|truncatechars:30 }}
+                              </div>-->
+                            </div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endfor %}
+                </div>
               </div>
             </div>
           </div>
