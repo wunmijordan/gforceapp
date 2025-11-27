@@ -419,11 +419,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # ✅ Cloudinary / Local upload
             file_field = None
             file_type = None
+            file_name = None
             if file_data:
                 file_type = file_data.get("type")
                 if not settings.DEBUG:
                     # Cloudinary → MUST store public_id
                     file_field = file_data.get("public_id")
+                    file_name = file_data.get("name")
                 else:
                     # Dev → MUST store relative path for FileField
                     file_field = file_data.get("path")
@@ -437,6 +439,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 parent=parent,
                 file=file_field,   # 👈 this is now always a FileField
                 file_type=file_type,
+                file_name = file_name,
                 link_url=link_meta.get("url"),
                 link_title=link_meta.get("title"),
                 link_description=link_meta.get("description"),

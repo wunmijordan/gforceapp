@@ -330,31 +330,39 @@ def upload_file(request):
 
     try:
         if not settings.DEBUG:
-            # Cloudinary
+            # --- Production: Cloudinary ---
             import cloudinary.uploader
             result = cloudinary.uploader.upload(
                 f,
                 folder="chat/files",
                 resource_type="auto"
             )
+
             file_url = result["secure_url"]
             file_path = result["public_id"]
+            original_name = result.get("original_filename") or f.name
+
         else:
-            # Local dev
+            # --- Local Dev ---
             from django.core.files.storage import default_storage
+
             file_path = default_storage.save(f"chat/files/{f.name}", f)
             file_path = file_path.lstrip("/")
+
+            # Strip media/ prefix if present
             if file_path.startswith("media/"):
                 file_path = file_path[len("media/"):]
+
             file_url = f"/media/{file_path}"
+            original_name = f.name  # <--- IMPORTANT FIX
 
         guessed_type, _ = mimetypes.guess_type(f.name)
 
         return JsonResponse({
             "url": file_url,        # always frontend-ready
             "path": file_path,      # store in DB
-            "public_id": file_path, # Cloudinary id or local path
-            "name": f.name,
+            "public_id": file_path, # Cloudinary ID or local path
+            "name": original_name,  # <--- Correct for both environments
             "size": f.size,
             "type": guessed_type or f.content_type or "application/octet-stream",
         })
@@ -363,6 +371,7 @@ def upload_file(request):
         import logging
         logging.exception("File upload failed")
         return JsonResponse({"error": str(e)}, status=500)
+
 
 
 

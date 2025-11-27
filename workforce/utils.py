@@ -197,7 +197,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         try:
             # file_obj is now always a string (Cloudinary public_id or relative path)
             file_path = str(file_obj).lstrip("/")
-            file_name = urllib.parse.unquote(os.path.basename(file_path)) or "file"
+            file_name = m.file_name or urllib.parse.unquote(os.path.basename(file_path))
 
             # Determine URL
             if file_path.startswith("http"):
