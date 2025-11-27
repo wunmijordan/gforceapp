@@ -12,6 +12,8 @@ from django.db.models import Q
 from django.conf import settings
 from geopy.distance import distance
 from django.core.exceptions import ValidationError
+from cloudinary.utils import cloudinary_url
+
 
 
 import requests
@@ -203,17 +205,10 @@ def serialize_message(m, mention_map=None, mention_regex=None):
             if file_path.startswith("http"):
                 file_url = file_path
             elif settings.DEBUG:
-                # Local dev
-                if file_path.startswith("media/"):
-                    file_url = f"/{file_path}"
-                else:
-                    file_url = f"/media/{file_path}"
-            elif "res.cloudinary.com" in file_path:
-                # Full Cloudinary URL stored
-                file_url = file_path
+                file_url = f"/media/{file_path}"
             else:
-                # Cloudinary public_id → generate full URL
-                file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
+                # Cloudinary → generate URL from public_id
+                file_url, options = cloudinary_url(file_path, resource_type="auto")
 
             guessed_type, _ = mimetypes.guess_type(file_path)
             file_type = guessed_type or "application/octet-stream"
