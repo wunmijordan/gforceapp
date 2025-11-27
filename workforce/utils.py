@@ -191,24 +191,29 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- Helper to resolve file URLs
-    def build_file_payload(file_obj, message_id):
+    def build_file_payload(file_obj, file_name=None, message_id=None):
         """Return standardized file payload for chat messages (works for dev + prod)."""
         if not file_obj:
             return None
 
         try:
-            # file_obj is now always a string (Cloudinary public_id or relative path)
             file_path = str(file_obj).lstrip("/")
-            file_name = m.file_name or urllib.parse.unquote(os.path.basename(file_path))
+            file_name = file_name or urllib.parse.unquote(file_path.split("/")[-1])
 
             # Determine URL
             if file_path.startswith("http"):
+                # Already a full URL
                 file_url = file_path
             elif settings.DEBUG:
-                file_url = f"/media/{file_path}"
+                # Local dev
+                if file_path.startswith("media/"):
+                    file_url = f"/{file_path}"
+                else:
+                    file_url = f"/media/{file_path}"
             else:
-                # Cloudinary → generate URL from public_id
-                file_url, options = cloudinary_url(file_path, resource_type="auto")
+                # Production → Cloudinary
+                # file_path = public_id
+                file_url, _ = cloudinary_url(file_path, resource_type="auto")
 
             guessed_type, _ = mimetypes.guess_type(file_path)
             file_type = guessed_type or "application/octet-stream"
@@ -217,7 +222,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
                 "id": message_id,
                 "url": file_url,
                 "name": file_name,
-                "size": None,  # We can optionally store size in DB if needed
+                "size": None,  # optional
                 "type": file_type,
             }
 
@@ -254,7 +259,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- File payload (main message)
-    file_payload = build_file_payload(m.file, m.id)
+    file_payload = build_file_payload(m.file, m.file_name, m.id)
 
     # --- Link preview
     link_payload = None
