@@ -126,7 +126,7 @@ class ChatMessage(models.Model):
   )
 
   # Attachments
-  file = models.TextField(blank=True, null=True)
+  file = models.URLField(blank=True, null=True)
   file_type = models.TextField(blank=True, null=True)
 
   # Link preview
