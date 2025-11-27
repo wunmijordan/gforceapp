@@ -191,18 +191,18 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- Helper to resolve file URLs
-    def build_file_payload(file_obj, file_name=None, message_id=None):
+    def build_file_payload(file_obj, message_id):
         """Return standardized file payload for chat messages (works for dev + prod)."""
         if not file_obj:
             return None
 
         try:
+            # file_obj is now always a string (Cloudinary public_id or relative path)
             file_path = str(file_obj).lstrip("/")
-            file_name = file_name or urllib.parse.unquote(file_path.split("/")[-1])
+            file_name = m.file_name or urllib.parse.unquote(os.path.basename(file_path))
 
             # Determine URL
             if file_path.startswith("http"):
-                # Already a full URL
                 file_url = file_path
             elif settings.DEBUG:
                 # Local dev
@@ -210,10 +210,12 @@ def serialize_message(m, mention_map=None, mention_regex=None):
                     file_url = f"/{file_path}"
                 else:
                     file_url = f"/media/{file_path}"
+            elif "res.cloudinary.com" in file_path:
+                # Full Cloudinary URL stored
+                file_url = file_path
             else:
-                # Production → Cloudinary
-                # file_path = public_id
-                file_url, _ = cloudinary_url(file_path, resource_type="auto")
+                # Cloudinary public_id → generate full URL
+                file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
 
             guessed_type, _ = mimetypes.guess_type(file_path)
             file_type = guessed_type or "application/octet-stream"
@@ -222,7 +224,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
                 "id": message_id,
                 "url": file_url,
                 "name": file_name,
-                "size": None,  # optional
+                "size": None,  # We can optionally store size in DB if needed
                 "type": file_type,
             }
 
@@ -259,7 +261,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- File payload (main message)
-    file_payload = build_file_payload(m.file, m.file_name, m.id)
+    file_payload = build_file_payload(m.file, m.id)
 
     # --- Link preview
     link_payload = None
