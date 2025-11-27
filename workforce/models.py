@@ -148,10 +148,6 @@ class ChatMessage(models.Model):
   )
 
   class Meta:
-    db_table = 'accounts_chatmessage'  # old table name
-    ordering = ['-created_at']
-
-  class Meta:
       ordering = ["-created_at"]
       indexes = [
           models.Index(fields=["created_at"]),
