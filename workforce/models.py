@@ -126,14 +126,14 @@ class ChatMessage(models.Model):
   )
 
   # Attachments
-  file = models.CharField(max_length=500, blank=True, null=True)
-  file_type = models.CharField(max_length=100, blank=True, null=True)
+  file = models.TextField(blank=True, null=True)
+  file_type = models.TextField(blank=True, null=True)
 
   # Link preview
-  link_url = models.URLField(max_length=500, blank=True, null=True)
+  link_url = models.TextField(blank=True, null=True)
   link_title = models.TextField(blank=True, null=True)
   link_description = models.TextField(blank=True, null=True)
-  link_image = models.URLField(max_length=500, blank=True, null=True)
+  link_image = models.TextField(blank=True, null=True)
 
   # Pinning
   pinned = models.BooleanField(default=False, db_index=True)
