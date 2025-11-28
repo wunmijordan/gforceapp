@@ -3292,14 +3292,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const uploaded = await res.json();
 
         // ✅ Pass whole metadata to WS
-        payload.file = {
-          url: uploaded.url,              // ALWAYS INCLUDED
-          path: uploaded.path,
-          public_id: uploaded.public_id,
-          name: uploaded.name,
-          size: uploaded.size,
-          type: uploaded.type
-        };
+        payload.file = uploaded;
         selectedFile = null;
       } catch (err) {
         console.error("❌ File upload error:", err);

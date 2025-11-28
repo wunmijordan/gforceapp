@@ -126,15 +126,15 @@ class ChatMessage(models.Model):
   )
 
   # Attachments
-  file = models.TextField(blank=True, null=True)
-  file_type = models.TextField(blank=True, null=True)
-  file_name = models.TextField(blank=True, null=True)
+  file = models.CharField(max_length=5000, blank=True, null=True)
+  file_type = models.CharField(max_length=5000, blank=True, null=True)
+  file_name = models.CharField(max_length=5000, blank=True, null=True)
 
   # Link preview
-  link_url = models.TextField(blank=True, null=True)
-  link_title = models.TextField(blank=True, null=True)
-  link_description = models.TextField(blank=True, null=True)
-  link_image = models.TextField(blank=True, null=True)
+  link_url = models.URLField(max_length=2000, blank=True, null=True)
+  link_title = models.CharField(max_length=5000, blank=True, null=True)
+  link_description = models.CharField(max_length=5000, blank=True, null=True)
+  link_image = models.URLField(max_length=2000, blank=True, null=True)
 
   # Pinning
   pinned = models.BooleanField(default=False, db_index=True)
@@ -146,6 +146,10 @@ class ChatMessage(models.Model):
       on_delete=models.SET_NULL,
       related_name="pinned_messages"
   )
+
+  class Meta:
+    db_table = 'accounts_chatmessage'  # old table name
+    ordering = ['-created_at']
 
   class Meta:
       ordering = ["-created_at"]
