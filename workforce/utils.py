@@ -211,9 +211,8 @@ def serialize_message(m, mention_map=None, mention_regex=None):
                 else:
                     file_url = f"/media/{file_path}"
             else:
-                # Production → Cloudinary
-                # file_path = public_id
-                file_url, _ = cloudinary_url(file_path, resource_type="auto")
+                # Cloudinary public_id → generate full URL
+                file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
 
             guessed_type, _ = mimetypes.guess_type(file_path)
             file_type = guessed_type or "application/octet-stream"

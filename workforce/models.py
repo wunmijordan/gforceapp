@@ -131,10 +131,10 @@ class ChatMessage(models.Model):
   file_name = models.CharField(max_length=5000, blank=True, null=True)
 
   # Link preview
-  link_url = models.URLField(max_length=2000, blank=True, null=True)
+  link_url = models.CharField(max_length=5000, blank=True, null=True)
   link_title = models.CharField(max_length=5000, blank=True, null=True)
   link_description = models.CharField(max_length=5000, blank=True, null=True)
-  link_image = models.URLField(max_length=2000, blank=True, null=True)
+  link_image = models.TextField(blank=True, null=True)
 
   # Pinning
   pinned = models.BooleanField(default=False, db_index=True)
@@ -146,10 +146,6 @@ class ChatMessage(models.Model):
       on_delete=models.SET_NULL,
       related_name="pinned_messages"
   )
-
-  class Meta:
-    db_table = 'accounts_chatmessage'  # old table name
-    ordering = ['-created_at']
 
   class Meta:
       ordering = ["-created_at"]
@@ -235,10 +231,6 @@ class Event(models.Model):
         related_name="events",
         help_text="Leave blank for general church-wide events",
     )
-  
-  class Meta:
-      db_table = 'accounts_event'  # old table name
-      ordering = ['date', 'day_of_week', 'time']
 
   class Meta:
       verbose_name = "Event"
@@ -272,10 +264,6 @@ class AttendanceRecord(models.Model):
   status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='absent')
   remarks = models.TextField(blank=True)
   timestamp = models.DateTimeField(auto_now_add=True)
-
-  class Meta:
-      db_table = 'accounts_attendancerecord'  # old table name
-      ordering = ['-date']
 
   class Meta:
       unique_together = ('user', 'event', 'date')
