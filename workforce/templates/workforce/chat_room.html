@@ -2598,7 +2598,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderFilePreview(file) {
       if (!file) return "";
 
-      const name = file.name || "file";
+      const name = file.name || file.original_name || "file";
       const type = (file.type || "").toLowerCase();
       const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
       const sizeText = file.size ? `${(file.size/1024).toFixed(1)} KB` : "";
@@ -3298,7 +3298,7 @@ document.addEventListener("DOMContentLoaded", () => {
           public_id: uploaded.public_id,
           name: uploaded.name,
           size: uploaded.size,
-          type: mime
+          type: uploaded.type
         };
         selectedFile = null;
       } catch (err) {
