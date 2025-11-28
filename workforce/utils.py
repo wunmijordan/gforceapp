@@ -153,6 +153,13 @@ def build_mention_helpers():
     regex = re.compile(r"(" + "|".join(map(re.escape, mention_map.keys())) + r")") if mention_map else None
     return mention_map, regex
 
+def cloudinary_url(public_id, resource_type):
+    cloud = settings.CLOUDINARY_STORAGE["CLOUD_NAME"]
+    rtype = "video" if resource_type.startswith("video") else "image"
+
+    return f"https://res.cloudinary.com/{cloud}/{rtype}/upload/{public_id}"
+
+
 
 def serialize_message(m, mention_map=None, mention_regex=None):
     """Unified serializer for both WebSocket + Views."""
@@ -191,38 +198,47 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- Helper to resolve file URLs
-    def build_file_payload(file_obj, message_id):
-        """Return standardized file payload for chat messages (works for dev + prod)."""
+    def build_file_payload(file_obj, message):
+        """Return a safe, correct, fully self-contained file payload."""
         if not file_obj:
             return None
 
         try:
-            # file_obj is now always a string (Cloudinary public_id or relative path)
             file_path = str(file_obj).lstrip("/")
-            file_name = m.file_name or urllib.parse.unquote(os.path.basename(file_path))
+
+            # File name stored in DB (fallback = last part of the path)
+            file_name = (
+                message.file_name or 
+                urllib.parse.unquote(os.path.basename(file_path))
+            )
+
+            # Determine MIME from stored name
+            guessed_mime, _ = mimetypes.guess_type(file_name)
+            mime = guessed_mime or message.file_type or "application/octet-stream"
 
             # Determine URL
             if file_path.startswith("http"):
                 file_url = file_path
-            elif settings.DEBUG:
-                # Local dev
-                if file_path.startswith("media/"):
-                    file_url = f"/{file_path}"
-                else:
-                    file_url = f"/media/{file_path}"
-            else:
-                # Cloudinary public_id → generate full URL
-                file_url = f"https://res.cloudinary.com/{settings.CLOUDINARY_STORAGE['CLOUD_NAME']}/auto/upload/{file_path}"
 
-            guessed_type, _ = mimetypes.guess_type(file_path)
-            file_type = guessed_type or "application/octet-stream"
+            elif settings.DEBUG:
+                # Local media
+                if not file_path.startswith("media/"):
+                    file_url = f"/media/{file_path}"
+                else:
+                    file_url = f"/{file_path}"
+
+            else:
+                # Cloudinary
+                resource_type = "video" if mime.startswith("video") else "image"
+                cloud = settings.CLOUDINARY_STORAGE["CLOUD_NAME"]
+                file_url = f"https://res.cloudinary.com/{cloud}/{resource_type}/upload/{file_path}"
 
             return {
-                "id": message_id,
+                "id": message.id,
                 "url": file_url,
                 "name": file_name,
-                "size": None,  # We can optionally store size in DB if needed
-                "type": file_type,
+                "size": None,
+                "type": mime,
             }
 
         except Exception as e:
@@ -248,7 +264,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
                 "image": parent.guest_card.picture.url if parent.guest_card.picture else None,
                 "date_of_visit": parent.guest_card.date_of_visit.strftime("%Y-%m-%d") if parent.guest_card.date_of_visit else "",
             } if parent.guest_card else None,
-            "file": build_file_payload(parent.file, parent.id),
+            "file": build_file_payload(parent.file, parent),
             "link_preview": {
                 "url": parent.link_url,
                 "title": parent.link_title,
@@ -258,7 +274,7 @@ def serialize_message(m, mention_map=None, mention_regex=None):
         }
 
     # --- File payload (main message)
-    file_payload = build_file_payload(m.file, m.id)
+    file_payload = build_file_payload(m.file, m)
 
     # --- Link preview
     link_payload = None
