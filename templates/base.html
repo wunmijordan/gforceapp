@@ -72,11 +72,11 @@
           <!-- Mobile logo (centered absolutely) -->
           {% if request.user|is_project_wide_admin %}
             <a href="{% url 'accounts:admin_dashboard' %}" aria-label="Gateway Nation" class="navbar-brand position-absolute top-50 start-50 translate-middle">
-              <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="80" height="80" class="me-2">
+              <img src="{% static 'images/Gateway Icon.png' %}" alt="Logo" width="80" height="80" class="me-2">
             </a>
           {% else %}
             <a href="{% url 'dashboard' %}" aria-label="Gateway Nation" class="navbar-brand position-absolute top-50 start-50 translate-middle">
-              <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="80" height="80" class="me-2">
+              <img src="{% static 'images/Gateway Icon.png' %}" alt="Logo" width="80" height="80" class="me-2">
             </a>
           {% endif %}
 
@@ -229,11 +229,11 @@
         <!-- Desktop logo (hidden on mobile) -->
         {% if request.user|is_project_wide_admin %}
           <a href="{% url 'accounts:admin_dashboard' %}" aria-label="Gateway Nation" class="navbar-brand d-none d-md-flex align-items-center">
-            <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="80" height="80" class="me-2">
+            <img src="{% static 'images/Gateway Icon.png' %}" alt="Logo" width="80" height="80" class="me-2">
           </a>
         {% else %}
           <a href="{% url 'dashboard' %}" aria-label="Gateway Nation" class="navbar-brand d-none d-md-flex align-items-center">
-            <img src="{% static 'images/church_logo.png' %}" alt="Logo" width="80" height="80" class="me-2">
+            <img src="{% static 'images/Gateway Icon.png' %}" alt="Logo" width="80" height="80" class="me-2">
           </a>
         {% endif %}
 
@@ -934,7 +934,7 @@
         
         <!-- Left: Logo -->
         <div class="col-12 col-md-4 mb-2 mb-md-0 d-flex justify-content-center justify-content-md-start align-items-center gap-2">
-          <img src="{% static 'images/church_logo.png' %}" alt="Church Logo" style="height: 30px;">
+          <img src="{% static 'images/Gateway Icon.png' %}" alt="Church Logo" style="height: 30px;">
           <span class="fw-semibold"></span>
         </div>
 
