@@ -973,22 +973,34 @@
   <!-- Android PWA Install Modal -->
   <div id="installModal" class="pwa-modal d-none">
     <div class="pwa-modal-content">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <img src="/static/images/icons/icon-192x192.png"
-            style="width:60px; height:60px; border-radius:10px;">
-        <div>
-          <span class="fst-italic">Install</span> 
-          <strong style="color: #ff5e01ff;">GForceApp</strong><br>
-          <small class="text-muted">Get the full experience on your device.</small>
-        </div>
-        <button id="installBtn" class="btn btn-dark mt-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#806885ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-download">
-            <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
-            <path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="fst-italic me-1">Install</span> <strong style="color: #ff5e01ff;"> GForceApp</strong>
+        </h5>
+        <button class="btn-animate-icon btn-animate-icon-rotate closeModal">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-x">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M18 6l-12 12" /><path d="M6 6l12 12" />
           </svg>
-          Install
         </button>
-        <button class="closeModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <img src="/static/images/icons/icon-192x192.png"
+              style="width:60px; height:60px; border-radius:10px;">
+          <div class="text-secondary">
+            Get the full experience on your device.
+          </div>
+          <button id="installBtn" class="btn btn-gray btn-animate-icon btn-animate-icon-move-down" 
+                  style="border: none; box-shadow: 0 4px 8px #000000ee;
+                          width: 150px; border-radius: 12px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#806885ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-download">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+              <path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />
+            </svg>
+            Install
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -996,20 +1008,31 @@
   <!-- iOS Install Modal -->
   <div id="iosInstallModal" class="pwa-modal d-none">
     <div class="pwa-modal-content">
-      <div style="display:flex; align-items:center; gap:12px;">
-        <img src="/static/images/icons/icon-192x192.png"
-            style="width:60px; height:60px; border-radius:10px;">
-        <div style="flex:1; line-height:1.35;">
-          <span class="fst-italic">Install</span> <strong style="color: #ff5e01ff;"> GForceApp</strong><br>
-          <small class="text-muted mb-2">Get the full experience on your device.</small>
-          Tap 
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#806885ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-share-2">
-            <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1" />
-            <path d="M12 14v-11" /><path d="M9 6l3 -3l3 3" />
-          </svg><br>
-          then, <strong>"Add to Home Screen"</strong>
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <span class="fst-italic">Install</span> <strong style="color: #ff5e01ff;"> GForceApp</strong>
+        </h5>
+        <button id="closeIosModal" class="btn-animate-icon btn-animate-icon-rotate closeModal">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-x">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M18 6l-12 12" /><path d="M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <img src="/static/images/icons/icon-192x192.png"
+              style="width:60px; height:60px; border-radius:10px;">
+          <div style="flex:1; line-height:1.35;">
+            <span class="text-muted mb-2">Get the full experience on your device.</span><br>
+            Tap 
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#806885ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-share-2">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1" />
+              <path d="M12 14v-11" /><path d="M9 6l3 -3l3 3" />
+            </svg><br>
+            then, <strong>"Add to Home Screen"</strong>
+          </div>
         </div>
-        <button id="closeIosModal" class="closeModal">&times;</button>
       </div>
     </div>
   </div>
@@ -1021,7 +1044,7 @@
     top:0; left:0;
     width:100%; height:100%;
     background: rgba(0,0,0,0.4);
-    box-shadow:0 6px 18px #000000ee;
+    box-shadow: 0 6px 18px #000000ee;
     display:flex;
     justify-content:center;
     align-items:center;
@@ -1057,12 +1080,26 @@
     transform: translateY(0);
   }
 
-  .pwa-modal .closeModal {
+  /* Center modal header title */
+  .pwa-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative; /* needed for absolute close button */
+    padding-right: 45px; /* space so title stays centered */
+  }
+
+  /* Position close button to far right */
+  .pwa-modal .modal-header .closeModal {
+    position: absolute;
     background:none;
     border:none;
-    color:#ff5e01;
+    color: #ff0101ff;
     font-size:20px;
     cursor:pointer;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
   }
   </style>
 
@@ -1073,29 +1110,38 @@
   const iosModal = document.getElementById('iosInstallModal');
   const closeBtns = document.querySelectorAll('.closeModal');
 
-  // Function to show modal
+  // SHOW modal
   function showModal(modal) {
-    modal.classList.add('show');
+    modal.classList.remove('d-none');   // FIX
+    requestAnimationFrame(() => {
+      modal.classList.add('show');
+    });
   }
 
-  // Function to hide modal
+  // HIDE modal
   function hideModal(modal) {
     modal.classList.remove('show');
+    setTimeout(() => {
+      modal.classList.add('d-none');    // hide after fade-out
+    }, 300);
   }
 
-  // Android PWA
+  // ANDROID PWA
   window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    showModal(installModal);
+    e.preventDefault();         // block native banner
+    deferredPrompt = e;         // store event
+    showModal(installModal);    // show custom modal
   });
 
+  // User clicks install
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) return;
     hideModal(installModal);
-    deferredPrompt.prompt();
-    const choiceResult = await deferredPrompt.userChoice;
-    console.log('User choice:', choiceResult.outcome);
+
+    deferredPrompt.prompt();                          // <-- REQUIRED USER ACTION
+    const choice = await deferredPrompt.userChoice;
+    console.log('User choice:', choice.outcome);
+
     deferredPrompt = null;
   });
 
@@ -1104,19 +1150,19 @@
     btn.addEventListener('click', (e) => {
       const modal = e.target.closest('.pwa-modal');
       hideModal(modal);
-      if(modal === iosModal){
+      if (modal === iosModal) {
         localStorage.setItem('iosInstallDismissed', 'true');
       }
     });
   });
 
-  // iOS PWA
+  // iOS Install
   document.addEventListener("DOMContentLoaded", () => {
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const isStandalone = window.navigator.standalone === true;
 
     if (isIOS && !isStandalone && !localStorage.getItem('iosInstallDismissed')) {
-      setTimeout(() => { showModal(iosModal); }, 800);
+      setTimeout(() => showModal(iosModal), 800);
     }
   });
   </script>
