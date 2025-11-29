@@ -1269,11 +1269,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!textEl) return;
 
     if (!teamName) {
-      textEl.innerHTML = `<span>Welcome back to GForce ChatRoom   ——   A People <em>Helped</em> By God!</span>`;
+      textEl.innerHTML = `<span><span class="me-2">Welcome back to GForce ChatRoom </span> — <span class="ms-2"> A People <em>Helped</em> By God!</span></span>`;
       banner.style.background = "#111827";
       banner.style.color = "#f59f00";
     } else {
-      textEl.innerHTML = `<span>${teamName} ChatRoom   ——   A People <em>Helped</em> By God!</span>`;
+      textEl.innerHTML = `<span><span class="me-2">${teamName} ChatRoom </span> — <span class="ms-2"> A People <em>Helped</em> By God!</span></span>`;
 
       if (colorClass) {
         banner.className = "chat-room-banner chat-room-banner-gradient"; // reset
@@ -2624,8 +2624,6 @@ document.addEventListener("DOMContentLoaded", () => {
               <video src="${file.url}" controls
                     style="max-width:200px; max-height:150px; border-radius:6px;"></video>
             </div>
-            <div class="mt-1 small text-muted text-center" 
-                  style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}</div>
           </div>`;
       }
 
@@ -2636,8 +2634,6 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="chat-file-card mb-2">
               <audio src="${file.url}" controls style="width:200px;"></audio>
             </div>
-            <div class="mt-1 small text-muted text-center" 
-                style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}</div>
           </div>`;
       }
 
@@ -2650,10 +2646,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 style="text-decoration:none; max-width:200px; max-height:200px; object-fit:cover; border-radius:6px;">
               ${icon}
               <div class="small text-white mt-1">${ext.toUpperCase()}</div>
-            
-              <div class="mt-1 small text-muted text-center mt-2" 
-                    style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}
-              </div>
             </a>
           </div>`;
       }
@@ -2667,9 +2659,6 @@ document.addEventListener("DOMContentLoaded", () => {
               style="text-decoration:none; max-width:200px; max-height:200px; object-fit:cover; border-radius:6px;">
             ${icon}  
             <div class="small text-white">${ext.toUpperCase()}</div>
-           
-            <div class="mt-1 small text-muted text-center mt-2" 
-                  style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}</div> 
           </a>         
         </div>`;
     }
@@ -2687,7 +2676,13 @@ document.addEventListener("DOMContentLoaded", () => {
           ${lp.image
             ? `<img src="${lp.image}" style="flex-shrink:0; width:60px; height:60px; border-radius:4px; object-fit:cover;">`
             : `<span class="avatar bg-blue-lt d-flex align-items-center justify-content-center"
-                      style="flex-shrink:0; width:60px; height:60px; border-radius:4px;">🌐</span>`}
+                      style="flex-shrink:0; width:60px; height:60px; border-radius:4px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 15l6 -6" />
+                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                    <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                  </svg>
+                </span>`}
           
           <div class="flex-grow-1 overflow-hidden" style="max-width:100%;">
             <div class="fw-bold text-white text-truncate" 
