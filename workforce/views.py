@@ -1,21 +1,33 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import user_passes_test, login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.urls import reverse_lazy, reverse
 from django.utils.timezone import localtime, now
-import pytz, requests, re, calendar, json, mimetypes, os
+import pytz, requests, re, calendar, json, mimetypes, os, cloudinary.uploader
 from accounts.models import CustomUser, TeamMembership
 from guests.models import GuestEntry
-from .models import ChatMessage, Event, AttendanceRecord, PersonalReminder, UserActivity, Team, ClockRecord
+from .models import (
+    ChatMessage, 
+    Event, 
+    AttendanceRecord, 
+    PersonalReminder, 
+    UserActivity, 
+    Team, 
+    ClockRecord,
+    Setlist,
+    SetlistSong,
+    ChordChart,
+)
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.paginator import Paginator
 from django.db.models import Q, Count, QuerySet
 from datetime import datetime, timedelta
 from django.db.models.functions import ExtractMonth
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse
 from django.contrib.auth.models import Group
 from accounts.utils import (
     user_in_groups,
@@ -1005,3 +1017,297 @@ def get_active_events(request):
         })
 
     return JsonResponse(data, safe=False)
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse, HttpResponseForbidden
+from .models import Song, TrackFile, Chart, RehearsalSession, Team
+from .forms import SongForm, TrackFileForm, ChartForm, RehearsalSessionForm
+from accounts.models import TeamMembership
+
+def user_in_team(user, team_name):
+    return TeamMembership.objects.filter(user=user, team__name__iexact=team_name).exists()
+
+@login_required
+def music_hub(request):
+    # Only Embassage members should see full hub (optionally)
+    is_embassage_member = user_in_team(request.user, "Embassage")
+    songs = Song.objects.filter(team__name__iexact="Embassage").order_by("-created_at")
+    rehearsals = RehearsalSession.objects.filter(team__name__iexact="Embassage").order_by("-date")
+    return render(request, "workforce/music_hub.html", {
+        "songs": songs,
+        "rehearsals": rehearsals,
+        "is_embassage": is_embassage_member,
+        "page_title": "Embassage Music Hub"
+    })
+
+
+@login_required
+def song_detail(request, pk):
+    song = get_object_or_404(Song, pk=pk)
+    # permission: require Embassage membership to view/manage
+    if song.team and song.team.name.lower() == "embassage" and not user_in_team(request.user, "Embassage"):
+        return HttpResponseForbidden("Not allowed")
+    tracks = song.tracks.all()
+    charts = song.charts.all()
+    return render(request, "workforce/music_song_detail.html", {
+        "song": song, "tracks": tracks, "charts": charts
+    })
+
+
+@login_required
+def upload_track(request, song_id=None):
+    if request.method == "POST":
+        form = TrackFileForm(request.POST, request.FILES)
+        if form.is_valid():
+            f = request.FILES["upload"]
+
+            # Upload to Cloudinary
+            uploaded = cloudinary.uploader.upload(
+                f,
+                resource_type="auto",
+                folder="gforce/music/tracks",
+            )
+
+            tf = form.save(commit=False)
+            tf.file = uploaded.get("secure_url")        # match ChatMessage.file
+            tf.file_name = f.name                       # match ChatMessage.file_name
+            tf.file_type = f.content_type               # match ChatMessage.file_type
+
+            tf.save()
+            return redirect(tf.song.get_absolute_url())
+    else:
+        initial = {}
+        if song_id:
+            initial["song"] = song_id
+        form = TrackFileForm(initial=initial)
+    return render(request, "workforce/upload_track.html", {"form": form})
+
+
+@login_required
+def upload_chart(request, song_id=None):
+    if request.method == "POST":
+        form = ChartForm(request.POST, request.FILES)
+        if form.is_valid():
+            f = request.FILES["upload"]
+
+            uploaded = cloudinary.uploader.upload(
+                f,
+                resource_type="auto",
+                folder="gforce/music/charts",
+            )
+
+            chart = form.save(commit=False)
+            chart.file = uploaded.get("secure_url")
+            chart.file_name = f.name
+            chart.file_type = f.content_type
+            chart.uploaded_by = request.user
+            chart.save()
+
+            return redirect(chart.song.get_absolute_url())
+    else:
+        initial = {}
+        if song_id:
+            initial["song"] = song_id
+        form = ChartForm(initial=initial)
+    return render(request, "workforce/upload_chart.html", {"form": form})
+
+
+@login_required
+def create_song(request):
+    if request.method == "POST":
+        form = SongForm(request.POST)
+        if form.is_valid():
+            song = form.save(commit=False)
+            # Bind to Embassage team automatically
+            emb_team = Team.objects.filter(name__iexact="Embassage").first()
+            song.team = emb_team
+            song.created_by = request.user
+            song.save()
+            return redirect(song.get_absolute_url())
+    else:
+        form = SongForm()
+    return render(request, "workforce/create_song.html", {"form": form})
+
+
+from django.http import JsonResponse
+import requests  # or your chosen API library
+
+@login_required
+def search_external_songs(request):
+    query = request.GET.get("q", "")
+    results = []
+
+    if query:
+        # Example using pseudo-API (replace with real Christian/Gospel song API)
+        try:
+            resp = requests.get("https://example-song-api.com/search", params={"q": query, "limit": 10})
+            data = resp.json()
+            results = [{
+                "id": s["id"],
+                "title": s["title"],
+                "composer": s.get("composer"),
+                "bpm": s.get("bpm"),
+                "key": s.get("key"),
+                "audio_urls": s.get("audio_urls", []),
+                "charts": s.get("charts", []),
+                "lyrics": s.get("lyrics"),
+                "image": s.get("image"),
+                "video": s.get("video")
+            } for s in data.get("results", [])]
+        except Exception as e:
+            print("External search error:", e)
+
+    return JsonResponse({"results": results})
+
+
+from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import redirect
+
+@login_required
+@csrf_exempt
+def import_song(request):
+    if request.method == "POST":
+        external_id = request.POST.get("external_id")
+        if not external_id:
+            return JsonResponse({"error": "No external_id provided"}, status=400)
+
+        # Fetch song data from external API
+        try:
+            resp = requests.get(f"https://example-song-api.com/song/{external_id}")
+            data = resp.json()
+        except:
+            return JsonResponse({"error": "Failed to fetch song data"}, status=500)
+
+        emb_team = Team.objects.filter(name__iexact="Embassage").first()
+
+        song = Song.objects.create(
+            title=data.get("title"),
+            subtitle=data.get("subtitle"),
+            composer=data.get("composer"),
+            bpm=data.get("bpm"),
+            key=data.get("key"),
+            notes=data.get("notes"),
+            created_by=request.user,
+            team=emb_team
+        )
+
+        # Upload audio tracks
+        for track in data.get("audio_urls", []):
+            TrackFile.objects.create(
+                song=song,
+                title=track.get("title"),
+                file=track.get("url"),
+                file_type=track.get("type"),
+                track_type=track.get("track_type", "practice")
+            )
+
+        # Upload charts / PDFs / lyrics
+        for chart in data.get("charts", []):
+            Chart.objects.create(
+                song=song,
+                title=chart.get("title"),
+                file=chart.get("url"),
+                file_type=chart.get("type"),
+                uploaded_by=request.user
+            )
+
+        return JsonResponse({"success": True, "song_url": song.get_absolute_url()})
+
+    return JsonResponse({"error": "Invalid method"}, status=405)
+
+
+
+@login_required
+def rehearsal_create(request):
+    if request.method == "POST":
+        form = RehearsalSessionForm(request.POST)
+        if form.is_valid():
+            rs = form.save(commit=False)
+            rs.created_by = request.user
+            rs.save()
+            form.save_m2m()
+            return redirect("workforce:music_hub")
+    else:
+        form = RehearsalSessionForm(initial={"team": Team.objects.filter(name__iexact="Embassage").first()})
+    return render(request, "workforce/rehearsal_form.html", {"form": form})
+
+@login_required
+@require_POST
+def reorder_tracks(request, song_id):
+    song = get_object_or_404(Song, pk=song_id)
+    order_list = request.POST.getlist("order[]")
+
+    for index, track_id in enumerate(order_list):
+        TrackFile.objects.filter(id=track_id, song=song).update(order=index)
+
+    return JsonResponse({"status": "ok"})
+
+
+@login_required
+def setlist_builder(request):
+    team = Team.objects.get(name="Embassage")
+    songs = Song.objects.all().order_by("title")
+    setlists = team.setlists.order_by("-created_at")
+
+    return render(request, "workforce/setlist_builder.html", {
+        "team": team,
+        "songs": songs,
+        "setlists": setlists
+    })
+
+@login_required
+@require_POST
+def create_setlist(request):
+    team = Team.objects.get(name="Embassage")
+    title = request.POST["title"]
+
+    s = Setlist.objects.create(
+        team=team,
+        title=title,
+        created_by=request.user
+    )
+
+    return redirect("workforce:setlist_detail", s.id)
+
+@login_required
+@require_POST
+def reorder_setlist(request, setlist_id):
+    s = get_object_or_404(Setlist, pk=setlist_id)
+    items = request.POST.getlist("order[]")
+
+    for index, item_id in enumerate(items):
+        SetlistSong.objects.filter(id=item_id, setlist=s).update(order=index)
+
+    return JsonResponse({"status": "ok"})
+
+
+CHORDS = ["C","C#","Db","D","D#","Eb","E","F","F#","Gb","G","G#","Ab","A","A#","Bb","B"]
+
+def transpose_chord(chord, steps):
+    base = chord.rstrip("m7susadddimaug")
+    suffix = chord[len(base):]
+    if base not in CHORDS:
+        return chord
+    new_index = (CHORDS.index(base) + steps) % len(CHORDS)
+    return CHORDS[new_index] + suffix
+
+
+@login_required
+@require_POST
+def transpose_chart(request, chart_id):
+    chart = get_object_or_404(ChordChart, pk=chart_id)
+    steps = int(request.POST["steps"])
+
+    lines = chart.content.split("\n")
+    result = []
+
+    for line in lines:
+        words = line.split(" ")
+        new_words = [transpose_chord(w, steps) for w in words]
+        result.append(" ".join(new_words))
+
+    return JsonResponse({"content": "\n".join(result)})
+
+

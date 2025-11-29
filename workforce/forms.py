@@ -59,3 +59,35 @@ class EventForm(forms.ModelForm):
             "duration_days": "Duration (Days)",
             "postponed": "Postpone this Event",
         }
+
+
+from django import forms
+from .models import Song, TrackFile, Chart, RehearsalSession
+
+class SongForm(forms.ModelForm):
+    class Meta:
+        model = Song
+        fields = ["title", "subtitle", "composer", "bpm", "key", "notes"]
+
+class TrackFileForm(forms.ModelForm):
+    upload = forms.FileField(required=True)
+    class Meta:
+        model = TrackFile
+        fields = ["song", "title", "file", "file_type", "track_type", "order"]
+
+class ChartForm(forms.ModelForm):
+    upload = forms.FileField(required=True)
+    class Meta:
+        model = Chart
+        fields = ["song", "title", "file", "notes"]
+
+class RehearsalSessionForm(forms.ModelForm):
+    class Meta:
+        model = RehearsalSession
+        fields = ["team", "title", "songs", "date", "start_time", "end_time", "location", "notes"]
+        widgets = {
+            "songs": forms.SelectMultiple(attrs={"class":"form-control"}),
+            "date": forms.DateInput(attrs={"type":"date","class":"form-control"}),
+            "start_time": forms.TimeInput(attrs={"type":"time","class":"form-control"}),
+            "end_time": forms.TimeInput(attrs={"type":"time","class":"form-control"}),
+        }

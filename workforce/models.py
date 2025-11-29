@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import now
+from django.dispatch import receiver
+from django.db.models.signals import post_save
 from cloudinary.models import CloudinaryField
 from guests.models import GuestEntry
 from django.utils.functional import cached_property
@@ -361,3 +363,156 @@ class UserActivity(models.Model):
 
   def __str__(self):
       return f"{self.user} - {self.activity_type} ({self.created_at.strftime('%Y-%m-%d')})"
+
+
+from django.urls import reverse
+from cloudinary.models import CloudinaryField   # optional - used if you have cloudinary
+from django.conf import settings
+
+class Song(models.Model):
+    """
+    A single song/track record. Can have multiple audio files (multitrack/practice stems)
+    and associated charts (PDF/Chord sheets).
+    """
+    team = models.ForeignKey("workforce.Team", null=True, blank=True, on_delete=models.SET_NULL, related_name="songs")
+    title = models.CharField(max_length=255)
+    subtitle = models.CharField(max_length=255, blank=True, null=True)
+    composer = models.CharField(max_length=255, blank=True, null=True)
+    bpm = models.PositiveIntegerField(blank=True, null=True)
+    key = models.CharField(max_length=20, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse("workforce:music_song_detail", kwargs={"pk": self.pk})
+
+
+class TrackFile(models.Model):
+    """
+    An uploaded audio file that can be a practice mix/stem (mp3/wav) or backing track.
+    Use CloudinaryField if you have Cloudinary; else use FileField.
+    """
+    AUDIO_TYPES = [("mix", "Mix"), ("stem", "Stem"), ("backing", "Backing Track"), ("practice", "Practice")]
+    song = models.ForeignKey(Song, related_name="tracks", on_delete=models.CASCADE)
+    title = models.CharField(max_length=1000, blank=True, null=True)
+    file = models.CharField(max_length=5000, blank=True, null=True)        # Cloudinary URL
+    file_type = models.CharField(max_length=1000, blank=True, null=True)    # MIME type
+    file_name = models.CharField(max_length=1000, blank=True, null=True)   # original filename
+    track_type = models.CharField(max_length=1000, choices=AUDIO_TYPES, default="practice")
+    duration_seconds = models.PositiveIntegerField(blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+    waveform_generated = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+
+    def __str__(self):
+        return f"{self.song.title} — {self.title or self.file.name}"
+
+
+class Chart(models.Model):
+    """
+    Lyrics, chord charts, PDF score, etc.
+    """
+    song = models.ForeignKey(Song, related_name="charts", on_delete=models.CASCADE)
+    title = models.CharField(max_length=1000, blank=True, null=True)
+    file = models.CharField(max_length=5000, blank=True, null=True)        # Cloudinary URL
+    file_type = models.CharField(max_length=1000, blank=True, null=True)    # MIME type (pdf/docx)
+    file_name = models.CharField(max_length=1000, blank=True, null=True)   # original filename
+    notes = models.TextField(blank=True, null=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.song.title} — {self.title or self.file.name}"
+
+
+class RehearsalSession(models.Model):
+    """
+    Rehearsal sessions attached to songs or freeform (with date/time and notes).
+    Can link to multiple songs/tracks.
+    """
+    team = models.ForeignKey("workforce.Team", null=True, blank=True, on_delete=models.SET_NULL, related_name="rehearsals")
+    title = models.CharField(max_length=255)
+    songs = models.ManyToManyField(Song, blank=True, related_name="rehearsals")
+    date = models.DateField()
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-start_time"]
+
+    def __str__(self):
+        return f"{self.title} — {self.date}"
+    
+
+class Setlist(models.Model):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="setlists")
+    title = models.CharField(max_length=255)
+    date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
+
+
+class SetlistSong(models.Model):
+    setlist = models.ForeignKey(Setlist, on_delete=models.CASCADE, related_name="items")
+    song = models.ForeignKey(Song, on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return f"{self.order+1}. {self.song.title}"
+
+
+class ChordChart(models.Model):
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name="chord_charts")
+    title = models.CharField(max_length=255, blank=True)
+    content = models.TextField()   # ChordPro text
+    key = models.CharField(max_length=10, blank=True)
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.song.title} — {self.title or 'Chord Chart'}"
+
+
+
+
+    
+
+from mutagen import File as MutagenFile
+
+@receiver(post_save, sender=TrackFile)
+def extract_audio_duration(sender, instance, created, **kwargs):
+    if created and instance.file:
+        try:
+            audio = MutagenFile(instance.file.path)
+            if audio and audio.info.length:
+                instance.duration_seconds = int(audio.info.length)
+                instance.save(update_fields=["duration_seconds"])
+        except Exception:
+            pass
+

@@ -2594,7 +2594,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     }
 
-    // Render FIle Attachment
+    // Render FIle Attachment <div class="mt-1 small text-muted text-center" 
+                  //style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}</div>
     function renderFilePreview(file) {
       if (!file) return "";
 
@@ -2612,8 +2613,6 @@ document.addEventListener("DOMContentLoaded", () => {
               <img src="${file.url}" alt="${name}"
                   style="max-width:200px; max-height:200px; object-fit:cover; border-radius:6px;">
             </a>
-            <div class="mt-1 small text-muted text-center" 
-                  style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">${name} · ${sizeText}</div>
           </div>`;
       }
 

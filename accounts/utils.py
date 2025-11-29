@@ -41,6 +41,9 @@ def user_in_team(user, team_names):
     
     if user.is_superuser:
         return True
+    
+    if is_project_admin(user):
+        return True
 
     # Normalize input to list of team names
     if team_names is None:

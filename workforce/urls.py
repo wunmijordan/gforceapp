@@ -24,4 +24,17 @@ urlpatterns = [
     #path('api/fetch-history/', views.fetch_history, name='fetch_history'),
     #path("chat/send/", views.send_chat_message, name="send_chat_message"),
     #path("chat/fetch/", views.fetch_chat_messages, name="fetch_chat_messages"),
+
+    path("embassage/music/", views.music_hub, name="music_hub"),
+    path("embassage/music/song/create/", views.create_song, name="music_create_song"),
+    path("music/search_external_songs", views.search_external_songs, name="search_external_songs"),
+    path("music/import_song/", views.import_song, name="import_song"),
+    path("embassage/music/song/<int:pk>/", views.song_detail, name="music_song_detail"),
+    path("embassage/music/song/<int:song_id>/upload-track/", views.upload_track, name="upload_track"),
+    path("embassage/music/song/<int:song_id>/upload-chart/", views.upload_chart, name="upload_chart"),
+    path("embassage/music/rehearsal/create/", views.rehearsal_create, name="rehearsal_create"),
+    path("embassage/music/song/<int:song_id>/reorder-tracks/", views.reorder_tracks, name="music_reorder_tracks"),    
+    path("embassage/music/setlist/build/", views.setlist_builder, name="setlist_builder"),
+    path("embassage/music/setlist/<int:setlist_id>/create-setlist/", views.create_setlist, name="setlist_detail"),
+    path("embassage/music/setlist/<int:setlist_id>/reorder-setlist/", views.reorder_setlist, name="setlist_detail"),
 ]
