@@ -419,19 +419,31 @@
                     </a>
 
                     <!-- Preview Modal -->
-                    <div class="modal modal-sm modal-blur fade" id="previewModal{{ guest.id }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal modal-md modal-blur fade" id="previewModal{{ guest.id }}" tabindex="-1" aria-hidden="true">
                       <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content border-0 text-white"
-                              style="border-radius: 10px">
+                        <div class="modal-content border-0 text-white pb-0"
+                              style="border-radius: 24px !important; box-shadow: 0 4px 8px #000000f3;">
+                          <div class="modal-header" style="border-bottom: none;">
+                            <h5 class="modal-title text-warning text-center">{{ guest.title|default:"" }} {{ guest.full_name }}</h5>
+                            <button class="btn-animate-icon btn-animate-icon-rotate ms-auto border-0" data-bs-dismiss="modal" style="background: none !important;">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff0000ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-x">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M18 6l-12 12" /><path d="M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                           <div class="modal-body text-center p-4">
                             {% if guest.picture %}
-                              <img src="{{ guest.picture.url }}" class="img-fluid rounded shadow" alt="{{ guest.title|default:'' }} {{ guest.full_name }}">
+                              <img src="{{ guest.picture.url }}" class="img-fluid" 
+                                    alt="{{ guest.title|default:'' }} {{ guest.full_name }}"
+                                    style="border-radius: 20px !important; box-shadow: 0 4px 8px #000000f3;">
                             {% else %}
-                              <div class="bg-grey rounded p-5 d-inline-block">
+                              <div class="bg-grey p-5 d-inline-block"
+                                    style="border-radius: 20px !important; box-shadow: 0 4px 8px #000000f3;">
                                 <span class="fw-bold display-4">{{ guest.initials }}</span>
                               </div>
                             {% endif %}
-                            <p class="mt-3 mb-0 fw-bold">{{ guest.title|default:"" }} {{ guest.full_name }}</p>
+                            <!--<p class="mt-3 mb-0 fw-bold">{{ guest.title|default:"" }} {{ guest.full_name }}</p>-->
                           </div>
                         </div>
                       </div>

@@ -28,7 +28,7 @@ ENVIRONMENT = env("DJANGO_ENV")
 
 ALLOWED_HOSTS = env.list(
     "ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1", "magnet.gatewaynation.org"]
+    default=["localhost", "127.0.0.1", "gforce.gatewaynation.org"]
 )
 
 # =========================
@@ -268,7 +268,7 @@ WS_SCHEME = "wss://" if ENVIRONMENT == "production" else "ws://"
 # =========================
 CSRF_TRUSTED_ORIGINS = env.list(
     "CSRF_TRUSTED_ORIGINS",
-    default=["https://magnet.gatewaynation.org"]
+    default=["https://gforce.gatewaynation.org"]
 )
 
 CSRF_COOKIE_SECURE = not DEBUG

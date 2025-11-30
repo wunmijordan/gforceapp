@@ -552,7 +552,12 @@ def user_list(request):
         ).distinct()
 
         # Exclude project-level admins
-        users = [u for u in users_in_teams if not is_project_admin(u)]
+        users = users_in_teams.exclude(
+            Q(is_superuser=True) |
+            Q(groups__name__in=["Pastor", "Admin"]) |
+            Q(title__iexact="Pastor") |
+            Q(title__iexact="Admin")
+        ).distinct()
     else:
         messages.error(request, "You do not have permission to view users.")
         return redirect('accounts:admin_dashboard')
@@ -562,8 +567,9 @@ def user_list(request):
         users = users.filter(
             Q(full_name__icontains=search_query) |
             Q(username__icontains=search_query) |
-            Q(email__icontains=search_query)
-        )
+            Q(email__icontains=search_query) |
+            Q(team_memberships__team__name__icontains=search_query)
+        ).distinct()
 
     # Pagination
     view_type = request.GET.get('view', 'cards')
