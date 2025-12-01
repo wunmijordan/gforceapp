@@ -46,4 +46,4 @@ COPY . /app/
 # =========================
 # Stage 4: Expose Port & Start Gunicorn
 # =========================
-CMD ["gunicorn", "gforceapp.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--workers", "8", "--threads", "8", "--bind", "0.0.0.0:$PORT", "--timeout", "180"]
+CMD gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 8 --threads 8 --bind 0.0.0.0:8000 --timeout 180
