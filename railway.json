@@ -1,9 +1,24 @@
 {
-  "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
-  },
-  "deploy": {
-    "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'"
-  }
+  "services": [
+    {
+      "name": "web",
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+      },
+      "deploy": {
+        "startCommand": "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 8 --bind 0.0.0.0:$PORT --timeout 180"
+      }
+    },
+    {
+      "name": "scheduler",
+      "build": {
+        "builder": "NIXPACKS",
+        "buildCommand": "pip install -r requirements.txt"
+      },
+      "deploy": {
+        "startCommand": "python manage.py start_scheduler"
+      }
+    }
+  ]
 }

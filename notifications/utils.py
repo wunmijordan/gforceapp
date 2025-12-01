@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from notifications.models import Notification
+from notifications.models import Notification, PushSubscription
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from guests.models import GuestEntry
@@ -56,16 +56,16 @@ def user_full_name(user):
 
 
 
-def push_realtime_notification(notification):
+def push_websocket_notification(notification):
     """
-    Send a real-time notification to the user's WebSocket group.
+    Send a real-time notification via WebSocket (only works if user is online/connected).
     """
     channel_layer = get_channel_layer()
     group_name = f"user_{notification.user.id}"
     async_to_sync(channel_layer.group_send)(
         group_name,
         {
-            "type": "send_notification",  # must match consumer method
+            "type": "send_notification",
             "content": {
                 "id": notification.id,
                 "title": notification.title,
@@ -78,10 +78,37 @@ def push_realtime_notification(notification):
     )
 
 
+def push_webpush_notification(notification):
+    """
+    Send a system push notification using the Web Push API.
+    Works even if browser is closed.
+    """
+    for sub in notification.user.push_subscriptions.all():
+        try:
+            webpush(
+                subscription_info=sub.subscription_data,
+                data=json.dumps({
+                    "title": notification.title,
+                    "body": notification.description,
+                    "url": notification.link or "/",
+                    "sound": getattr(notification.user, "notification_sound", "chime1"),
+                    "vibration": True,
+                }),
+                vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": "mailto:magnet@gatewaynation.org"},
+            )
+        except WebPushException as e:
+            # Remove expired subscriptions
+            if "410" in str(e) or "404" in str(e):
+                sub.delete()
+            else:
+                print(f"Web Push failed for {notification.user}: {repr(e)}")
+
+
 def notify_users(users, title, description, link="#", is_urgent=False, is_success=False):
     """
-    Create in-app notifications for a set of users and push both WebSocket
-    and Web Push notifications (system notifications).
+    Create notifications for a set of users, push both WebSocket (optional)
+    and Web Push notifications.
     """
     for user in users:
         # 1️⃣ Create DB notification
@@ -92,32 +119,14 @@ def notify_users(users, title, description, link="#", is_urgent=False, is_succes
             link=link,
             is_urgent=is_urgent,
             is_success=is_success,
+            created_at=timezone.now()
         )
 
-        # 2️⃣ Push via WebSocket
-        push_realtime_notification(notif)
+        # 2️⃣ Real-time WebSocket update (only if user is connected)
+        push_websocket_notification(notif)
 
-        # 3️⃣ Push via Web Push
-        for sub in user.push_subscriptions.all():
-            try:
-                webpush(
-                    subscription_info=sub.subscription_data,
-                    data=json.dumps({
-                        "title": title,
-                        "body": description,
-                        "url": link,
-                        "sound": getattr(user.settings, "notification_sound", "chime1"),
-                        "vibration": getattr(user.settings, "vibration_enabled", True),
-                    }),
-                    vapid_private_key=settings.VAPID_PRIVATE_KEY,
-                    vapid_claims={"sub": "mailto:magnet@gatewaynation.org"},
-                )
-            except WebPushException as e:
-                # Remove expired subscriptions
-                if "410" in str(e) or "404" in str(e):
-                    sub.delete()
-                else:
-                    print(f"Web Push failed for {user}: {repr(e)}")
+        # 3️⃣ Web Push (system notification — works offline)
+        push_webpush_notification(notif)
 
 
 def get_user_role(user):

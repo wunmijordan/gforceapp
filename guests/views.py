@@ -469,12 +469,23 @@ def channel_breakdown(request):
 User = get_user_model()
 
 
+from django.core.cache import cache
+from django.db.models import Q, Count, Max, Prefetch
+from django.core.paginator import Paginator
+from django.utils.timesince import timesince
+from django.utils.timezone import now, make_aware, is_naive
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.utils.http import urlencode
+from datetime import datetime, timedelta
+
+# ---------- guest_list_view ----------
 @login_required
 def guest_list_view(request):
     user = request.user
     role = user.username
 
-    # --- GET filters ---
+    # ---------------------- GET FILTERS ----------------------
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '').strip()
     channel_filter = request.GET.get('channel', '').strip()
@@ -484,17 +495,24 @@ def guest_list_view(request):
     date_of_visit_filter = request.GET.get('date_of_visit', '').strip()
     view_type = request.GET.get('view', 'cards')
 
-    # --- Base queryset ---
+    # ---------------------- Base queryset ----------------------
     if is_magnet_admin(user):
-        queryset = GuestEntry.objects.all()
+        qs = GuestEntry.objects.all()
     else:
-        queryset = GuestEntry.objects.filter(
-            Q(assigned_to=user) | Q(full_name="Wunmi Jordan")
+        qs = GuestEntry.objects.filter(
+            Q(assigned_to=user) |
+            Q(full_name="Wunmi Jordan")
         )
 
-    # --- Apply search ---
+    # ---------------------- RELATIONS + PREFETCH ----------------------
+    qs = qs.prefetch_related("assigned_to").prefetch_related(
+        Prefetch("reviews"),
+        Prefetch("reports")
+    )
+
+    # ---------------------- SEARCH ----------------------
     if search_query:
-        queryset = queryset.filter(
+        qs = qs.filter(
             Q(full_name__icontains=search_query) |
             Q(phone_number__icontains=search_query) |
             Q(email__icontains=search_query) |
@@ -506,94 +524,91 @@ def guest_list_view(request):
             Q(assigned_to__full_name__icontains=search_query)
         )
 
-    # --- Apply other filters ---
+    # ---------------------- FILTERS ----------------------
     if status_filter:
-        queryset = queryset.filter(status__iexact=status_filter)
+        qs = qs.filter(status__iexact=status_filter)
     if channel_filter:
-        queryset = queryset.filter(channel_of_visit__iexact=channel_filter)
+        qs = qs.filter(channel_of_visit__iexact=channel_filter)
     if purpose_filter:
-        queryset = queryset.filter(purpose_of_visit__iexact=purpose_filter)
+        qs = qs.filter(purpose_of_visit__iexact=purpose_filter)
     if service_filter:
-        queryset = queryset.filter(service_attended__iexact=service_filter)
+        qs = qs.filter(service_attended__iexact=service_filter)
     if date_of_visit_filter:
-        queryset = queryset.filter(date_of_visit=date_of_visit_filter)
+        qs = qs.filter(date_of_visit=date_of_visit_filter)
 
-    # --- Annotate ---
-    queryset = queryset.annotate(
+    # ---------------------- ANNOTATIONS ----------------------
+    qs = qs.annotate(
         report_count=Count('reports'),
-        last_reported=Max('reports__report_date')
+        last_reported=Max('reports__report_date'),
+        unread_reviews=Count('reviews', filter=Q(reviews__is_read=False))
     ).order_by('-custom_id')
 
-    # --- Pagination ---
+    # ---------------------- PAGINATION ----------------------
     per_page = 50 if view_type == 'list' else 45
-    paginator = Paginator(queryset, per_page)
+    paginator = Paginator(qs, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
+    # ---------------------- Excluded fields + svg icons ----------------------
     excluded_fields = {
         "id", "custom_id", "title", "full_name", "gender",
         "message", "picture", "phone_number", "assigned_to"
     }
 
-    svg_icons={
-        "email":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
-            <path d="M16 12v1.5a2.5 2.5 0 0 0 5 0v-1.5a9 9 0 1 0 -5.5 8.28" />""",  # replace with real paths
-        "date_of_birth":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" />
+    svg_icons = {
+        "email": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+            <path d="M16 12v1.5a2.5 2.5 0 0 0 5 0v-1.5a9 9 0 1 0 -5.5 8.28" />""",
+        "date_of_birth": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" />
             <path d="M16 3v4" /><path d="M8 3v4" />
             <path d="M4 11h16" /><path d="M11 15h1" /><path d="M12 15v3" />""",
-        "age_range":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "age_range": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
             <path d="M11.5 10.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0" />
             <path d="M11.5 13.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0" />
             <path d="M7 15v-6" /><path d="M15.5 12h3" /><path d="M17 10.5v3" />""",
-        "marital_status":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 22v-5l-1 -1v-4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4l-1 1v5" /><path d="M17 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+        "marital_status": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 22v-5l-1 -1v-4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4l-1 1v5" /><path d="M17 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
             <path d="M15 22v-4h-2l2 -6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1l2 6h-2v4" />""",
-        "home_address":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
+        "home_address": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
             <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" />""",
-        "occupation":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
+        "occupation": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
             <path d="M12 12l0 .01" /><path d="M3 13a20 20 0 0 0 18 0" />""",
-        "date_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" />
+        "date_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" />
             <path d="M18 18m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M15 3v4" />
             <path d="M7 3v4" /><path d="M3 11h16" /><path d="M18 16.496v1.504l1 1" />""",
-        "purpose_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "purpose_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M3 21l18 0" /><path d="M10 21v-4a2 2 0 0 1 4 0v4" /><path d="M10 5l4 0" />
             <path d="M12 3l0 5" /><path d="M6 21v-7m-2 2l8 -8l8 8m-2 -2v7" />""",
-        "channel_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
+        "channel_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
             <path d="M16 3l-4 4l-4 -4" />""",
-        "service_attended":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+        "service_attended": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
             <path d="M7 20h8l-4 -4v-7l4 3l2 -2" />""",
-        "referrer_name":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" /><path d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />
+        "referrer_name": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" /><path d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />
             <path d="M12.5 15.5l2 2" /><path d="M15 13l2 2" />""",
-        "referrer_phone_number":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" />
+        "referrer_phone_number": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" />
             <path d="M8 4l2 0" /><path d="M9 17l0 .01" /><path d="M21 6l-2 3l2 3l-2 3l2 3" />""",
-        "status":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+        "status": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
             <path d="M14.997 19.317l-1.583 1.583a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 13.657 -5.584" />
             <path d="M19 22v.01" /><path d="M19 19a2.003 2.003 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483" />""",
-        "assigned_at":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "assigned_at": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" /><path d="M16 19h6" />
             <path d="M19 16v6" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4" />""",
     }
 
-    # --- Build uniform field_data ---
+    # ---------------------- Build lightweight field_data for visible guests ----------------------
+    # Only iterate non-excluded fields to avoid extra work.
     for guest in page_obj:
         fields = []
-        for field in guest._meta.fields:
-            if field.name in excluded_fields:
-                continue
-            value = getattr(guest, field.name)
+        for field in (f for f in guest._meta.fields if f.name not in excluded_fields):
+            value = getattr(guest, field.name, None)
 
-            # Initialize time_since for all fields
+            # time_since for date_of_visit only (lightweight)
             time_since = None
-
-            # Calculate simplified time for date_of_visit
             if field.name == "date_of_visit" and value:
-                # Convert date to datetime at midnight
-                dt_value = datetime.combine(value, datetime.min.time())
+                dt_value = datetime.combine(value, datetime.min.time()) if hasattr(value, 'year') else value
                 if is_naive(dt_value):
                     dt_value = make_aware(dt_value)
                 delta = timesince(dt_value, now())
-                time_since = delta.split(",")[0]  # only the first unit (e.g., "3 days")
+                time_since = delta.split(",")[0] if delta else None
 
-            # if this field has choices, use the display method
             if field.choices:
                 display_value = getattr(guest, f"get_{field.name}_display")()
             else:
@@ -601,38 +616,64 @@ def guest_list_view(request):
 
             fields.append({
                 "name": field.name,
-                "verbose_name": field.verbose_name.title(),
-                "value": value,
+                "verbose_name": getattr(field, "verbose_name", field.name).title(),
+                "value": display_value,
                 "choices": bool(field.choices),
                 "time_since": time_since,
                 "icon": field.name,
+                "svg": svg_icons.get(field.name),  # include svg path for template use
             })
 
         guest.field_data = fields
 
-        # Flag guests assigned in the last 14 days
+        # lightweight flags
+        guest.has_unread_reviews = getattr(guest, "unread_reviews", 0) > 0
         guest.is_new = False
-        if guest.assigned_at and (now() - guest.assigned_at <= timedelta(days=14)):
+        if getattr(guest, "assigned_at", None) and (now() - guest.assigned_at <= timedelta(days=14)):
             guest.is_new = True
 
-        guest.has_unread_reviews = guest.reviews.filter(is_read=False).exists()
+    # ---------------------- CACHED FILTER LISTS ----------------------
+    channels = cache.get_or_set(
+        "guest_channels",
+        lambda: list(
+            GuestEntry.objects.values_list('channel_of_visit', flat=True).distinct().order_by('channel_of_visit')
+        ),
+        600
+    )
 
-    # --- Build query_string excluding 'page' for pagination links ---
+    purposes = cache.get_or_set(
+        "guest_purposes",
+        lambda: list(
+            GuestEntry.objects.values_list('purpose_of_visit', flat=True).distinct().order_by('purpose_of_visit')
+        ),
+        600
+    )
+
+    services = cache.get_or_set(
+        "guest_services",
+        lambda: list(
+            GuestEntry.objects.values_list('service_attended', flat=True).distinct().order_by('service_attended')
+        ),
+        600
+    )
+
+    # ---------------------- QUERY STRING ----------------------
     params = request.GET.copy()
     params.pop('page', None)
     query_string = urlencode(params)
 
+    # ---------------------- MAGNET USERS/TEAM ----------------------
     magnet_team = Team.objects.filter(name__iexact="magnet").first()
 
-    magnet_users = CustomUser.objects.filter(is_superuser=False,
+    magnet_users = CustomUser.objects.filter(
+        is_superuser=False,
         team_memberships__team__name__iexact="Magnet",
         is_active=True
-    ).distinct().order_by("full_name")
+    ).prefetch_related("team_memberships__team").distinct().order_by("full_name")
 
-    # Exclude project admins (Pastor/Admin roles)
     magnet_users = [u for u in magnet_users if not is_project_admin(u)]
 
-    # --- Context ---
+    # ---------------------- CONTEXT ----------------------
     context = {
         'page_obj': page_obj,
         'view_type': view_type,
@@ -645,13 +686,14 @@ def guest_list_view(request):
         'user_filter': user_filter,
         'date_of_visit': date_of_visit_filter,
         'show_filters': True,
-        'channels': GuestEntry.objects.values_list('channel_of_visit', flat=True).distinct().order_by('channel_of_visit'),
+        'channels': channels,
         'statuses': [s[0] for s in GuestEntry.STATUS_CHOICES],
-        'purposes': GuestEntry.objects.values_list('purpose_of_visit', flat=True).distinct().order_by('purpose_of_visit'),
-        'services': GuestEntry.objects.values_list('service_attended', flat=True).distinct().order_by('service_attended'),
+        'purposes': purposes,
+        'services': services,
         'query_string': query_string,
         'role': role,
         'svg_icons': svg_icons,
+        'excluded_fields': excluded_fields,
         "magnet_team": {
             "id": magnet_team.id,
             "name": magnet_team.name,
@@ -661,6 +703,8 @@ def guest_list_view(request):
     }
 
     return render(request, 'guests/guest_list.html', context)
+
+
 
 
 

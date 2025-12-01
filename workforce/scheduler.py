@@ -51,7 +51,10 @@ def schedule_event_notifications():
     print("🟡 [Scheduler] schedule_event_notifications() called")
 
     try:
-        scheduler.remove_all_jobs()
+        for job in scheduler.get_jobs():
+            if job.id.startswith("event_"):
+                scheduler.remove_job(job.id)
+
         events = Event.objects.filter(is_active=True)
 
         print(f"🟢 [Scheduler] Scheduling {events.count()} events")
@@ -115,6 +118,48 @@ def schedule_event_notifications():
         print(f"❌ [Scheduler] Error scheduling: {e}")
 
 
+from notifications.models import Notification
+from notifications.broadcast import broadcast_notification
+
+def schedule_push_notifications():
+    """
+    Schedule pending notifications that should be sent in the future.
+    Can be run on startup and daily.
+    """
+    print("🟡 [Scheduler] schedule_push_notifications() called")
+
+    try:
+        now = timezone.now()
+
+        # Example: notifications with scheduled send time in the future
+        pending_notifications = Notification.objects.filter(
+            is_read=False,
+            created_at__gte=now  # adjust if you have a 'send_at' field
+        )
+
+        for notif in pending_notifications:
+            # Schedule 5 seconds after creation (or customize)
+            run_time = notif.created_at + timedelta(seconds=5)
+            if run_time < now:
+                run_time = now + timedelta(seconds=2)
+
+            scheduler.add_job(
+                broadcast_notification,
+                trigger="date",
+                run_date=run_time,
+                args=[notif],
+                id=f"notif_{notif.id}",
+                replace_existing=True,
+                misfire_grace_time=30,
+            )
+
+            print(f"🔔 Scheduled push notification: {notif.title} → {run_time}")
+
+    except Exception as e:
+        print(f"❌ [Scheduler] Error scheduling push notifications: {e}")
+
+
+
 # --------------------------------------------------------------------
 # Start scheduler (safe, idempotent, threadsafe)
 # --------------------------------------------------------------------
@@ -148,6 +193,19 @@ def start():
             )
 
             print("🔁 [Scheduler] Auto-reschedule set for 00:10 daily")
+
+            threading.Timer(3.0, schedule_push_notifications).start()
+
+            # Daily refresh (optional)
+            scheduler.add_job(
+                schedule_push_notifications,
+                trigger="cron",
+                hour=0,
+                minute=15,  # separate from event reschedule
+                id="daily_push_reschedule",
+                replace_existing=True,
+            )
+            print("🔁 [Scheduler] Push notifications auto-reschedule set for 00:15 daily")
 
         except Exception as e:
             print(f"❌ [Scheduler] Failed to start: {e}")

@@ -35,26 +35,6 @@ application = ProtocolTypeRouter({
 })
 
 
-# ---------- Safe APScheduler Startup (RUN_MAIN Only) ----------
-def is_main_process():
-    """
-    Django autoreloader runs two processes:
-      - Parent = watches files
-      - Child  = runs the app (RUN_MAIN=true)
-    Scheduler must ONLY run in the child.
-    """
-    return os.environ.get("RUN_MAIN") == "true"
-
-
-if is_main_process():
-    try:
-        from workforce.apps import start_scheduler
-        start_scheduler()
-        print("✅ APScheduler started from ASGI (main process).")
-    except Exception as e:
-        print(f"❌ Failed to start APScheduler: {e}")
-
-
 
 
 

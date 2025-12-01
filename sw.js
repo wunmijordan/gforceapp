@@ -39,6 +39,13 @@ self.addEventListener("push", function (event) {
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow(event.notification.data)
+    clients.matchAll({ type: "window" }).then(windowClients => {
+      for (let client of windowClients) {
+        if (client.url === event.notification.data && "focus" in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(event.notification.data);
+    })
   );
 });
