@@ -23,7 +23,7 @@ from django.utils.timesince import timesince
 import pytz
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.template.loader import render_to_string, get_template
-#import weasyprint
+import weasyprint
 #from .utils import get_week_start_end
 from django.utils.dateparse import parse_date
 from django.db.models.functions import ExtractYear, ExtractMonth, TruncMonth
@@ -1412,14 +1412,14 @@ def export_guests_excel(request):
 
 
 
-#@login_required
-#def export_guests_pdf(request):
-#    guests = GuestEntry.objects.all()
-#    html = render_to_string('guests/guest_list_pdf.html', {'guests': guests})
-#    pdf_file = weasyprint.HTML(string=html).write_pdf()
-#    response = HttpResponse(pdf_file, content_type='application/pdf')
-#    response['Content-Disposition'] = 'filename="all_guests.pdf"'
-#    return response
+@login_required
+def export_guests_pdf(request):
+    guests = GuestEntry.objects.all()
+    html = render_to_string('guests/guest_list_pdf.html', {'guests': guests})
+    pdf_file = weasyprint.HTML(string=html).write_pdf()
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = 'filename="all_guests.pdf"'
+    return response
 
 
 
