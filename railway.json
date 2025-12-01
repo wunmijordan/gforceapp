@@ -3,7 +3,7 @@
     {
       "name": "web",
       "build": {
-        "builder": "NIXPACKS",
+        "builder": "RAILPACKS",
         "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
       },
       "deploy": {
@@ -13,7 +13,7 @@
     {
       "name": "scheduler",
       "build": {
-        "builder": "NIXPACKS",
+        "builder": "RAILPACKS",
         "buildCommand": "pip install -r requirements.txt"
       },
       "deploy": {
