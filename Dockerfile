@@ -44,13 +44,6 @@ RUN pip install -r requirements.txt
 COPY . /app/
 
 # =========================
-# Stage 4: Collect Static, Migrate, and Set Cloudinary Env
+# Stage 4: Expose Port & Start Gunicorn
 # =========================
-# Collect static files and run migrations
-RUN python manage.py collectstatic --noinput
-RUN python manage.py migrate
-
-# =========================
-# Stage 5: Expose Port & Start Gunicorn
-# =========================
-CMD sh -c "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 16 --threads 8 --bind 0.0.0.0:$PORT --timeout 180"
+CMD sh -c "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 16 --threads 8 --bind 0.0.0.0:$PORT --timeout 180"
