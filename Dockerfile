@@ -58,4 +58,4 @@ RUN python manage.py migrate
 # =========================
 # Stage 5: Expose Port & Start Gunicorn
 # =========================
-CMD ["sh", "-c", "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 8 --bind 0.0.0.0:$PORT --timeout 180"]
+CMD ["gunicorn", "gforceapp.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8000"]

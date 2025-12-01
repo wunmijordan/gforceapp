@@ -23,6 +23,9 @@ from django.views.generic import TemplateView
 from gforceapp import views
 from django.views.generic import RedirectView
 from django.views.static import serve
+from django.http import JsonResponse
+def health(request):
+    return JsonResponse({"status": "ok"})
 
 
 urlpatterns = [
@@ -40,6 +43,8 @@ urlpatterns = [
     # Post-login redirection
     path('post-login/', post_login_redirect, name='post_login_redirect'),
     path("sw.js", lambda request: serve(request, "sw.js", document_root=settings.BASE_DIR)),
+
+    path("health/", health),
 ]
 
 # Debug + media
