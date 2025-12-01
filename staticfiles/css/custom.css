@@ -146,6 +146,39 @@
   margin-top: 0;
 }
 
+/* ===================================
+Reduce padding on tablets so items fit */
+@media (min-width: 768px) and (max-width: 991px) {
+  /* Reduce logo size just for tablet screens */
+  .navbar-brand img {
+    width: 50px !important;
+    height: 50px !important;
+    flex-shrink: 0 !important;   /* Prevent logo compression */
+  }
+
+  .navbar .container-fluid {
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
+  }
+
+  /* Shrink gap between right-side icons */
+  .navbar-nav.order-md-last .nav-link {
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
+  }
+
+  /* Prevent username block from forcing overflow */
+  .navbar .nav-item .ps-2 {
+    display: none !important;
+  }
+
+  /* Allow items to shrink proportionally */
+  .navbar-nav.order-md-last,
+  .navbar-brand {
+    flex-shrink: 1;
+  }
+}
+
 /* ============================
    5. Dropdown menu animation
    ============================ */
