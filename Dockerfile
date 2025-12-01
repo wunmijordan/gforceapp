@@ -46,11 +46,6 @@ COPY . /app/
 # =========================
 # Stage 4: Collect Static, Migrate, and Set Cloudinary Env
 # =========================
-# Set Cloudinary env vars here (replace with your actual values or use .env)
-ENV CLOUDINARY_CLOUD_NAME=your_cloud_name
-ENV CLOUDINARY_API_KEY=your_api_key
-ENV CLOUDINARY_API_SECRET=your_api_secret
-
 # Collect static files and run migrations
 RUN python manage.py collectstatic --noinput
 RUN python manage.py migrate
@@ -58,4 +53,4 @@ RUN python manage.py migrate
 # =========================
 # Stage 5: Expose Port & Start Gunicorn
 # =========================
-CMD ["gunicorn", "gforceapp.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8000"]
+CMD sh -c "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 16 --threads 8 --bind 0.0.0.0:$PORT --timeout 180"
