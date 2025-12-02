@@ -9,6 +9,7 @@
   },
   "deployProcesses": {
     "web": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'",
-    "scheduler": "python manage.py start_scheduler"
+    "scheduler": "python manage.py start_scheduler",
+    "nginx": "sh -c 'nginx -g \"daemon off;\" -c /app/nginx.conf'"
   }
 }
