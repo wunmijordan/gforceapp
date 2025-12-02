@@ -7,8 +7,22 @@
         "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
       },
       "deploy": {
-        "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'"
-      }
+        "startCommand": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application"
+      },
+      "env": {
+        "DJANGO_ENV": "production",
+        "DEBUG": "False",
+        "SECRET_KEY": "${SECRET_KEY}",
+        "DATABASE_URL": "${DATABASE_URL}",
+        "REDIS_URL": "${REDIS_URL}",
+        "ALLOWED_HOSTS": "gforce.gatewaynation.org,gforceapp.up.railway.app"
+      },
+      "regions": [
+        {
+          "region": "EU",
+          "replicas": 8
+        }
+      ]
     },
     {
       "name": "scheduler",
