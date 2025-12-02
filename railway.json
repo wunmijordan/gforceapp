@@ -3,6 +3,10 @@
     "builder": "NIXPACKS",
     "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
   },
+  "deploy": {
+    "startCommand": "sh -c 'envsubst \"\\$PORT\" < /app/nginx.conf > /app/nginx.final.conf && nginx -g \"daemon off;\" -c /app/nginx.final.conf & daphne -b 0.0.0.0 -p \\$PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'",
+    "restartPolicyType": "ON_FAILURE"
+  },
   "deployProcesses": {
     "web": "sh -c 'envsubst \"\\$PORT\" < /app/nginx.conf > /app/nginx.final.conf && nginx -g \"daemon off;\" -c /app/nginx.final.conf & daphne -b 0.0.0.0 -p \\$PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'",
     "scheduler": "python manage.py start_scheduler"
