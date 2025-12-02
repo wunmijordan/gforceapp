@@ -4,25 +4,11 @@
       "name": "web",
       "build": {
         "builder": "RAILPACK",
-        "buildCommand": "apt-get update && apt-get install -y libcairo2 libpango-1.0-0 libgdk-pixbuf2.0-0 libffi-dev libglib2.0-0 shared-mime-info python3-dev build-essential && pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+        "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
       },
       "deploy": {
-        "startCommand": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application"
-      },
-      "env": {
-        "DJANGO_ENV": "production",
-        "DEBUG": "False",
-        "SECRET_KEY": "${SECRET_KEY}",
-        "DATABASE_URL": "${DATABASE_URL}",
-        "REDIS_URL": "${REDIS_URL}",
-        "ALLOWED_HOSTS": "gforce.gatewaynation.org,gforceapp.up.railway.app"
-      },
-      "regions": [
-        {
-          "region": "EU",
-          "replicas": 8
-        }
-      ]
+        "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'"
+      }
     },
     {
       "name": "scheduler",
