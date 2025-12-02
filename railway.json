@@ -3,22 +3,21 @@
     {
       "name": "web",
       "build": {
-        "builder": "DOCKERFILE"
+        "builder": "RAILPACK",
+        "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
       },
       "deploy": {
-        "startCommand": "",
-        "healthcheckPath": "/health/",
-        "healthcheckTimeout": 300
+        "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'"
       }
     },
     {
       "name": "scheduler",
       "build": {
-        "builder": "DOCKERFILE"
+        "builder": "RAILPACK",
+        "buildCommand": "pip install -r requirements.txt"
       },
       "deploy": {
-        "startCommand": "python manage.py start_scheduler",
-        "restartPolicyType": "ON_FAILURE"
+        "startCommand": "python manage.py start_scheduler"
       }
     }
   ]
