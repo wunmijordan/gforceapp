@@ -80,7 +80,8 @@ MIDDLEWARE = [
 ]
 
 if DEBUG:
-    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    # Debug toolbar MUST be last
+    MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
 
 # =========================
 # URLS & TEMPLATES
@@ -154,6 +155,20 @@ CHANNEL_LAYERS = {
             "capacity": 1000,
             "expiry": 60,
         },
+    }
+}
+
+# =========================
+# CACHING (Django ORM + Views)
+# =========================
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX": "gforceapp",
     }
 }
 
@@ -232,6 +247,7 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 28  # 28 days
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+CONN_MAX_AGE = 600  # DB persistent connections
 
 # =========================
 # PASSWORD VALIDATORS

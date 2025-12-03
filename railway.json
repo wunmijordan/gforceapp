@@ -4,11 +4,11 @@
     "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
   },
   "deploy": {
-    "startCommand": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'",
+    "startCommand": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application",
     "restartPolicyType": "ON_FAILURE"
   },
   "deployProcesses": {
-    "web": "sh -c 'daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application'",
+    "web": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 gforceapp.asgi:application",
     "scheduler": "python manage.py start_scheduler"
   }
 }
