@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 from django.contrib.auth import get_user_model, authenticate, login
 from django.core.paginator import Paginator
 from django.contrib.auth.models import Group, User
-from django.db.models import Q, Count, Max, F
+from django.db.models import Q, Count, Max, F, Prefetch
 from django.utils.http import urlencode
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -62,247 +62,181 @@ User = get_user_model()
 
 @login_required
 def dashboard_view(request):
-    """Main dashboard view with server-rendered stats for cards and charts."""
+    """Optimized user dashboard view with all stats, team data, and events."""
     user = request.user
-    current_year = datetime.now().year
-    last_30_days = timezone.now() - timedelta(days=30)
-    guest_entries = GuestEntry.objects.all()  # all guest entries for available years filter
+    today = timezone.localdate()
+    current_year = today.year
+    last_30_days = today - timedelta(days=30)
 
-    # Queryset for filtered data cards, charts (role based)
-    if is_magnet_admin(request.user):
+    # ---------------------- Base queryset ----------------------
+    if is_magnet_admin(user):
         queryset = GuestEntry.objects.all()
     else:
         queryset = GuestEntry.objects.filter(assigned_to=user)
 
-    available_years = guest_entries.dates('date_of_visit', 'year')
-    available_years = [d.year for d in available_years]
+    # ---------------------- Available years ----------------------
+    guest_entries = GuestEntry.objects.all()
+    available_years = [d.year for d in guest_entries.dates('date_of_visit', 'year')]
 
-
-    # Pre-fill for current year summary
+    # ---------------------- Summary JSON ----------------------
     request.GET = request.GET.copy()
     request.GET['year'] = str(current_year)
     summary_json = guest_entry_summary(request)
-    summary_data = summary_json.content.decode()
+    summary_data = json.loads(summary_json.content.decode())
 
-    # Services attended (used for most attended card & chart)
-    service_qs = GuestEntry.objects.values('service_attended').annotate(count=Count('id')).order_by('-count')
-    service_labels = [s['service_attended'] or "Not Specified" for s in service_qs]
-    service_counts = [s['count'] for s in service_qs]
+    # ---------------------- Aggregate services, purposes, status ----------------------
+    agg_qs = queryset.values('service_attended', 'purpose_of_visit', 'status', 'channel_of_visit').annotate(count=Count('id'))
 
-    # Home Church stats
-    total_purposes = GuestEntry.objects.count()
-    home_church_count = GuestEntry.objects.filter(purpose_of_visit__iexact="Home Church").count()
-    home_church_percentage = round((home_church_count / total_purposes) * 100, 1) if total_purposes else 0
+    # Service data
+    service_data = {}
+    total_services = 0
+    for entry in agg_qs:
+        service = entry['service_attended'] or "Not Specified"
+        service_data[service] = service_data.get(service, 0) + entry['count']
+        total_services += entry['count']
 
-    # Occasional Visit stats
-    occasional_visit_count = GuestEntry.objects.filter(purpose_of_visit__iexact="Occasional Visit").count()
-    occasional_visit_percentage = round((occasional_visit_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    # One-Time Visit stats
-    one_time_visit_count = GuestEntry.objects.filter(purpose_of_visit__iexact="One-Time Visit").count()
-    one_time_visit_percentage = round((one_time_visit_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    # Special Programme stats
-    special_programme_count = GuestEntry.objects.filter(purpose_of_visit__iexact="Special Programme").count()
-    special_programme_percentage = round((special_programme_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    # Most attended service card data
-    if service_qs:
-        most_attended_service = service_qs[0]['service_attended'] or "Not Specified"
-        most_attended_count = service_qs[0]['count']
-        total_services = sum(s['count'] for s in service_qs)
+    service_labels = list(service_data.keys())
+    service_counts = list(service_data.values())
+    if service_counts:
+        most_attended_service = service_labels[service_counts.index(max(service_counts))]
+        most_attended_count = max(service_counts)
         attendance_rate = round((most_attended_count / total_services) * 100, 1) if total_services else 0
     else:
-        most_attended_service = "No Data"
-        most_attended_count = 0
-        attendance_rate = 0
+        most_attended_service, most_attended_count, attendance_rate = "No Data", 0, 0
 
-    # Status data (for cards)
-    status_qs = GuestEntry.objects.values('status').annotate(count=Count('id'))
-    status_labels = [s['status'] or "Unknown" for s in status_qs]
-    status_counts = [s['count'] for s in status_qs]
-
-    # Channel of Visit
-    channel_qs = GuestEntry.objects.values('channel_of_visit').annotate(count=Count('id')).order_by('-count')
-    total_channels = sum(c['count'] for c in channel_qs)
-    channel_progress = [
-        {
-            'label': c['channel_of_visit'] or "Unknown",
-            'count': c['count'],
-            'percent': round((c['count'] / total_channels) * 100, 2) if total_channels else 0
+    # Purpose stats
+    purposes = ["Home Church", "Occasional Visit", "One-Time Visit", "Special Programme"]
+    total_purposes = sum(entry['count'] for entry in agg_qs)
+    purpose_stats = {
+        p: {
+            'count': sum(entry['count'] for entry in agg_qs if (entry['purpose_of_visit'] or "").lower() == p.lower()),
+            'percentage': round((sum(entry['count'] for entry in agg_qs if (entry['purpose_of_visit'] or "").lower() == p.lower()) / total_purposes)*100,1) if total_purposes else 0
         }
-        for c in channel_qs
+        for p in purposes
+    }
+
+    home_church_count = purpose_stats["Home Church"]["count"]
+    home_church_percentage = purpose_stats["Home Church"]["percentage"]
+    occasional_visit_count = purpose_stats["Occasional Visit"]["count"]
+    occasional_visit_percentage = purpose_stats["Occasional Visit"]["percentage"]
+    one_time_visit_count = purpose_stats["One-Time Visit"]["count"]
+    one_time_visit_percentage = purpose_stats["One-Time Visit"]["percentage"]
+    special_programme_count = purpose_stats["Special Programme"]["count"]
+    special_programme_percentage = purpose_stats["Special Programme"]["percentage"]
+
+    # Status data
+    status_data = {}
+    for entry in agg_qs:
+        status = entry['status'] or "Unknown"
+        status_data[status] = status_data.get(status, 0) + entry['count']
+    status_labels = list(status_data.keys())
+    status_counts = list(status_data.values())
+
+    # Channel progress
+    channel_data = {}
+    total_channels = 0
+    for entry in agg_qs:
+        channel = entry['channel_of_visit'] or "Unknown"
+        channel_data[channel] = channel_data.get(channel, 0) + entry['count']
+        total_channels += entry['count']
+    channel_progress = [
+        {'label': c, 'count': channel_data[c], 'percent': round((channel_data[c]/total_channels)*100,2) if total_channels else 0}
+        for c in channel_data
     ]
 
-    # Totals & stats for cards (role filtered)
-    planted_count = GuestEntry.objects.filter(status="Planted").count()
-    planted_elsewhere_count = GuestEntry.objects.filter(status="Planted Elsewhere").count()
-    relocated_count = GuestEntry.objects.filter(status="Relocated").count()
-    work_in_progress_count = GuestEntry.objects.filter(status="Work in Progress").count()
+    # Planted & other statuses
+    planted_count = status_data.get("Planted", 0)
+    planted_elsewhere_count = status_data.get("Planted Elsewhere", 0)
+    relocated_count = status_data.get("Relocated", 0)
+    work_in_progress_count = status_data.get("Work in Progress", 0)
 
-    # === Global total guests and monthly increase rate (all users) ===
-    total_guests = GuestEntry.objects.count()
-
-    today = now().date()
+    # ---------------------- Monthly & planted growth metrics in ONE query ----------------------
     first_day_this_month = today.replace(day=1)
     last_month_end = first_day_this_month - timedelta(days=1)
     first_day_last_month = last_month_end.replace(day=1)
 
-    current_month_count = GuestEntry.objects.filter(
-        date_of_visit__gte=first_day_this_month,
-        date_of_visit__lte=today
-    ).count()
+    metrics = queryset.aggregate(
+        total_guests=Count('id'),
+        current_month_count=Count('id', filter=Q(date_of_visit__gte=first_day_this_month, date_of_visit__lte=today)),
+        last_month_count=Count('id', filter=Q(date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end)),
+        user_total_guest_entries=Count('id', filter=Q(assigned_to=user)),
+        user_current_month_count=Count('id', filter=Q(assigned_to=user, date_of_visit__gte=first_day_this_month, date_of_visit__lte=today)),
+        user_last_month_count=Count('id', filter=Q(assigned_to=user, date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end)),
+        user_planted_total=Count('id', filter=Q(assigned_to=user, status="Planted")),
+        user_planted_current_month=Count('id', filter=Q(assigned_to=user, status="Planted", date_of_visit__gte=first_day_this_month, date_of_visit__lte=today)),
+        user_planted_last_month=Count('id', filter=Q(assigned_to=user, status="Planted", date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end)),
+    )
 
-    last_month_count = GuestEntry.objects.filter(
-        date_of_visit__gte=first_day_last_month,
-        date_of_visit__lte=last_month_end
-    ).count()
-
-    if last_month_count == 0:
-        if current_month_count > 0:
-            increase_rate = 100
-            percent_change = 100
-        else:
-            increase_rate = 0
-            percent_change = 0
+    # Global increase rate
+    if metrics['last_month_count'] == 0:
+        increase_rate = percent_change = 100 if metrics['current_month_count'] else 0
     else:
-        difference = current_month_count - last_month_count
-        increase_rate = round((difference / last_month_count) * 100, 1)
-        percent_change = increase_rate
+        increase_rate = percent_change = round(((metrics['current_month_count'] - metrics['last_month_count']) / metrics['last_month_count'])*100,1)
 
-    # === Logged-in user's total guest entries and month difference ===
-    user_total_guest_entries = GuestEntry.objects.filter(assigned_to=user).count()
-
-    user_current_month_count = GuestEntry.objects.filter(
-        assigned_to=user,
-        date_of_visit__gte=first_day_this_month,
-        date_of_visit__lte=today
-    ).count()
-
-    user_last_month_count = GuestEntry.objects.filter(
-        assigned_to=user,
-        date_of_visit__gte=first_day_last_month,
-        date_of_visit__lte=last_month_end
-    ).count()
-
-    if user_last_month_count == 0:
-        if user_current_month_count > 0:
-            user_diff_percent = 100
-            user_diff_positive = True
-        else:
-            user_diff_percent = 0
-            user_diff_positive = True
+    # User metrics
+    if metrics['user_last_month_count'] == 0:
+        user_diff_percent = 100 if metrics['user_current_month_count'] else 0
+        user_diff_positive = True
     else:
-        diff = ((user_current_month_count - user_last_month_count) / user_last_month_count) * 100
-        user_diff_percent = round(abs(diff), 1)
+        diff = ((metrics['user_current_month_count'] - metrics['user_last_month_count']) / metrics['user_last_month_count'])*100
+        user_diff_percent = round(abs(diff),1)
         user_diff_positive = diff >= 0
 
-    # === Planted guests growth rate for logged-in user ===
-    user_planted_total = GuestEntry.objects.filter(assigned_to=user, status="Planted").count()
-    planted_growth_rate = round((user_planted_total / user_total_guest_entries) * 100, 1) if user_total_guest_entries else 0
+    planted_growth_rate = round((metrics['user_planted_total'] / metrics['user_total_guest_entries'])*100,1) if metrics['user_total_guest_entries'] else 0
 
-    user_planted_current_month = GuestEntry.objects.filter(
-        assigned_to=user,
-        status="Planted",
-        date_of_visit__gte=first_day_this_month,
-        date_of_visit__lte=today
-    ).count()
-
-    user_planted_last_month = GuestEntry.objects.filter(
-        assigned_to=user,
-        status="Planted",
-        date_of_visit__gte=first_day_last_month,
-        date_of_visit__lte=last_month_end
-    ).count()
-
-    if user_planted_last_month == 0:
-        if user_planted_current_month > 0:
-            planted_growth_change = 100
-        else:
-            planted_growth_change = 0
+    if metrics['user_planted_last_month'] == 0:
+        planted_growth_change = 100 if metrics['user_planted_current_month'] else 0
     else:
-        diff = ((user_planted_current_month - user_planted_last_month) / user_planted_last_month) * 100
-        planted_growth_change = round(diff, 1)
+        planted_growth_change = round(((metrics['user_planted_current_month'] - metrics['user_planted_last_month']) / metrics['user_planted_last_month'])*100,1)
 
-    # Load illustration image as base64
-    #image_path = 'static/tabler/folders.png'
-    #with open(image_path, 'rb') as img:
-    #    image_data_uri = f"data:image/png;base64,{base64.b64encode(img.read()).decode()}"
+    # ---------------------- Teams + Other Users (optimized) ----------------------
+    user_teams = Team.objects.prefetch_related(
+        Prefetch(
+            "memberships__user",
+            queryset=CustomUser.objects.exclude(id=user.id).distinct()
+        )
+    ).filter(memberships__user=user).distinct()
 
-    # Get all teams the user belongs to
-    user_teams = Team.objects.filter(memberships__user=request.user).distinct()
-
-    # Fetch other users who belong to any of those same teams
-    other_users = CustomUser.objects.filter(
+    # All other users in these teams, excluding project admins
+    other_users_qs = CustomUser.objects.filter(
         team_memberships__team__in=user_teams
-    ).exclude(id=request.user.id).distinct()
+    ).exclude(id=user.id).distinct()
+    other_users = [u for u in other_users_qs if not is_project_admin(u)]
+    for u in other_users:
+        u.color = get_user_color(u.id)
 
-    # Exclude project-level admins
-    other_users = [u for u in other_users if not is_project_admin(u)]
+    # Precompute (team, members) pairs
+    team_member_pairs = [(team, [u for u in other_users if u.team_memberships.filter(team=team).exists()]) for team in user_teams]
 
-    # Assign color for each user card
-    for user in other_users:
-        user.color = get_user_color(user.id)
-
-    # Precompute: list of (team, members) pairs
-    team_member_pairs = []
-    for team in user_teams:
-        members = [u for u in other_users if u.team_memberships.filter(team=team).exists()]
-        team_member_pairs.append((team, members)) 
-
-    calendar_items = get_calendar_items(request.user)
-    clock_records = get_visible_clock_records(request.user, since_date=last_30_days)
-
-    today = timezone.localdate()
-
-    # Count totals
+    # ---------------------- Calendar & Clock Records ----------------------
+    calendar_items = get_calendar_items(user)
+    clock_records = get_visible_clock_records(user, since_date=last_30_days)
     total_clock_in = clock_records.filter(clock_in__isnull=False).count()
     total_clock_out = clock_records.filter(clock_out__isnull=False).count()
-
-    # Optional: today’s record
     today_record = clock_records.filter(date=today).first()
 
-    # === Upcoming Events (Team + GForce) ===
+    # ---------------------- Upcoming Events ----------------------
     events = []
-
-    # Get all accessible events (including all teams)
-    base_events = get_available_events_for_user(request.user)
-
     for team in [None] + list(Team.objects.all()):
-        team_id = getattr(team, "id", None)
-        expanded = expand_team_events(request.user, team_id)
-        events.extend(expanded)
+        events.extend(expand_team_events(user, getattr(team, "id", None)))
+    upcoming_events = sorted([e for e in events if e["date"] >= today], key=lambda e: (e["date"], e.get("time","")))
 
-    upcoming_events = [e for e in events if e["date"] >= today]
-    upcoming_events.sort(key=lambda e: e["date"])
-
-    # === Next available events for the week - Sunday → Saturday ===
-    weekday = today.isoweekday()  # Monday=1..Sunday=7
-
-    start_of_sunday = today - timedelta(days=(weekday % 7))   # Sunday gives 0
-    end_of_week = start_of_sunday + timedelta(days=6)        # Sunday → Sunday window
-
-    # Filter the user's events for this week (including GForce)
+    start_of_sunday = today - timedelta(days=(today.isoweekday() % 7))
+    end_of_week = start_of_sunday + timedelta(days=6)
     weekly_events = [
         e for e in upcoming_events
-        if start_of_sunday <= e["date"] <= end_of_week
-        and (e.get("team_id") in [t.id for t in user_teams] or e.get("team_id") is None)
+        if start_of_sunday <= e["date"] <= end_of_week and (e.get("team_id") in [t.id for t in user_teams] or e.get("team_id") is None)
     ]
-
-    weekly_events.sort(key=lambda e: (e["date"], e.get("time", "")))
-    # ✅ Add full ISO datetime for countdowns
     for e in weekly_events:
-        e["datetime_iso"] = (
-            f"{e['date']}T{e['time']}" if e.get("time") else f"{e['date']}T00:00:00"
-        )
-    next_events = weekly_events  # limit display to next 5 just in case
+        e["datetime_iso"] = f"{e['date']}T{e.get('time','00:00:00')}"
+    next_events = weekly_events
 
-
+    # ---------------------- Context ----------------------
     context = {
         'show_filters': False,
         'available_years': available_years,
         'current_year': current_year,
-        'summary_data': json.loads(summary_data),
+        'summary_data': summary_data,
         "service_labels": service_labels,
         "service_counts": service_counts,
         "status_labels": status_labels,
@@ -312,16 +246,15 @@ def dashboard_view(request):
         "planted_elsewhere_count": planted_elsewhere_count,
         "relocated_count": relocated_count,
         "work_in_progress_count": work_in_progress_count,
-        "total_guests": total_guests,               # Global total guests
-        "increase_rate": increase_rate,             # Global monthly increase rate (%)
-        "percent_change": percent_change,           # Same as increase_rate for display
-        "user_total_guest_entries": user_total_guest_entries,     # User's total guest entries
-        "user_guest_entry_diff_percent": user_diff_percent,       # User's month-over-month % difference (absolute)
-        "user_guest_entry_diff_positive": user_diff_positive,     # Boolean if user diff is positive
-        "user_planted_total": user_planted_total,
-        "planted_growth_rate": planted_growth_rate,                # User planted % of total user guests
-        "planted_growth_change": planted_growth_change,            # User planted MoM % change
-        #"image_data_uri": image_data_uri,
+        "total_guests": metrics['total_guests'],
+        "increase_rate": increase_rate,
+        "percent_change": percent_change,
+        "user_total_guest_entries": metrics['user_total_guest_entries'],
+        "user_guest_entry_diff_percent": user_diff_percent,
+        "user_guest_entry_diff_positive": user_diff_positive,
+        "user_planted_total": metrics['user_planted_total'],
+        "planted_growth_rate": planted_growth_rate,
+        "planted_growth_change": planted_growth_change,
         "most_attended_service": most_attended_service,
         "most_attended_count": most_attended_count,
         "attendance_rate": attendance_rate,
@@ -339,14 +272,15 @@ def dashboard_view(request):
         "calendar_items": calendar_items,
         'total_clock_in': total_clock_in,
         'total_clock_out': total_clock_out,
-        'today_clock_in': getattr(today_record, 'clock_in', None),
-        'today_clock_out': getattr(today_record, 'clock_out', None),
+        'today_clock_in': getattr(today_record,'clock_in',None),
+        'today_clock_out': getattr(today_record,'clock_out',None),
         "available_events": upcoming_events,
         "next_events_for_week": next_events,
         "page_title": "Dashboard"
     }
-    #return HttpResponseForbidden("Dashboard temporarily disabled.")
+
     return render(request, "guests/dashboard.html", context)
+
 
 
 
@@ -504,13 +438,24 @@ def guest_list_view(request):
             Q(full_name="Wunmi Jordan")
         )
 
-    # ---------------------- RELATIONS + PREFETCH ----------------------
-    qs = qs.prefetch_related("assigned_to").prefetch_related(
-        Prefetch("reviews"),
-        Prefetch("reports")
+    # ---------------------- Annotations ----------------------
+    qs = qs.annotate(
+        report_count=Count('reports', distinct=True),
+        last_reported=Max('reports__report_date'),
+        unread_reviews=Count('reviews', filter=Q(reviews__is_read=False), distinct=True)
     )
 
-    # ---------------------- SEARCH ----------------------
+    # ---------------------- Filters ----------------------
+    filters = {
+        "status__iexact": status_filter,
+        "channel_of_visit__iexact": channel_filter,
+        "purpose_of_visit__iexact": purpose_filter,
+        "service_attended__iexact": service_filter,
+        "date_of_visit": date_of_visit_filter
+    }
+    qs = qs.filter(**{k: v for k, v in filters.items() if v})
+
+    # ---------------------- Search ----------------------
     if search_query:
         qs = qs.filter(
             Q(full_name__icontains=search_query) |
@@ -524,156 +469,102 @@ def guest_list_view(request):
             Q(assigned_to__full_name__icontains=search_query)
         )
 
-    # ---------------------- FILTERS ----------------------
-    if status_filter:
-        qs = qs.filter(status__iexact=status_filter)
-    if channel_filter:
-        qs = qs.filter(channel_of_visit__iexact=channel_filter)
-    if purpose_filter:
-        qs = qs.filter(purpose_of_visit__iexact=purpose_filter)
-    if service_filter:
-        qs = qs.filter(service_attended__iexact=service_filter)
-    if date_of_visit_filter:
-        qs = qs.filter(date_of_visit=date_of_visit_filter)
+    qs = qs.order_by('-custom_id').select_related('assigned_to')  # avoid n+1 on foreign key
 
-    # ---------------------- ANNOTATIONS ----------------------
-    qs = qs.annotate(
-        report_count=Count('reports'),
-        last_reported=Max('reports__report_date'),
-        unread_reviews=Count('reviews', filter=Q(reviews__is_read=False))
-    ).order_by('-custom_id')
+    if user_filter:
+        qs = qs.filter(assigned_to_id=user_filter)
 
-    # ---------------------- PAGINATION ----------------------
+    # ---------------------- Pagination ----------------------
     per_page = 50 if view_type == 'list' else 45
     paginator = Paginator(qs, per_page)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
-    # ---------------------- Excluded fields + svg icons ----------------------
-    excluded_fields = {
-        "id", "custom_id", "title", "full_name", "gender",
-        "message", "picture", "phone_number", "assigned_to"
-    }
-
-    svg_icons = {
-        "email": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
-            <path d="M16 12v1.5a2.5 2.5 0 0 0 5 0v-1.5a9 9 0 1 0 -5.5 8.28" />""",
-        "date_of_birth": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" />
+    # ---------------------- Field Data (lightweight) ----------------------
+    excluded_fields = {"id", "custom_id", "title", "full_name", "gender",
+                       "message", "picture", "phone_number", "assigned_to"}
+    
+    svg_icons={
+        "email":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+            <path d="M16 12v1.5a2.5 2.5 0 0 0 5 0v-1.5a9 9 0 1 0 -5.5 8.28" />""",  # replace with real paths
+        "date_of_birth":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" />
             <path d="M16 3v4" /><path d="M8 3v4" />
             <path d="M4 11h16" /><path d="M11 15h1" /><path d="M12 15v3" />""",
-        "age_range": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "age_range":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
             <path d="M11.5 10.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0" />
             <path d="M11.5 13.5m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0" />
             <path d="M7 15v-6" /><path d="M15.5 12h3" /><path d="M17 10.5v3" />""",
-        "marital_status": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 22v-5l-1 -1v-4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4l-1 1v5" /><path d="M17 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+        "marital_status":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 22v-5l-1 -1v-4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4l-1 1v5" /><path d="M17 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
             <path d="M15 22v-4h-2l2 -6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1l2 6h-2v4" />""",
-        "home_address": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
+        "home_address":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
             <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" />""",
-        "occupation": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
+        "occupation":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" />
             <path d="M12 12l0 .01" /><path d="M3 13a20 20 0 0 0 18 0" />""",
-        "date_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" />
+        "date_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" />
             <path d="M18 18m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M15 3v4" />
             <path d="M7 3v4" /><path d="M3 11h16" /><path d="M18 16.496v1.504l1 1" />""",
-        "purpose_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "purpose_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M3 21l18 0" /><path d="M10 21v-4a2 2 0 0 1 4 0v4" /><path d="M10 5l4 0" />
             <path d="M12 3l0 5" /><path d="M6 21v-7m-2 2l8 -8l8 8m-2 -2v7" />""",
-        "channel_of_visit": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
+        "channel_of_visit":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
             <path d="M16 3l-4 4l-4 -4" />""",
-        "service_attended": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+        "service_attended":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
             <path d="M7 20h8l-4 -4v-7l4 3l2 -2" />""",
-        "referrer_name": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" /><path d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />
+        "referrer_name":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" /><path d="M12 6l-3.293 3.293a1 1 0 0 0 0 1.414l.543 .543c.69 .69 1.81 .69 2.5 0l1 -1a3.182 3.182 0 0 1 4.5 0l2.25 2.25" />
             <path d="M12.5 15.5l2 2" /><path d="M15 13l2 2" />""",
-        "referrer_phone_number": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" />
+        "referrer_phone_number":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" />
             <path d="M8 4l2 0" /><path d="M9 17l0 .01" /><path d="M21 6l-2 3l2 3l-2 3l2 3" />""",
-        "status": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+        "status":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
             <path d="M14.997 19.317l-1.583 1.583a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 13.657 -5.584" />
             <path d="M19 22v.01" /><path d="M19 19a2.003 2.003 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483" />""",
-        "assigned_at": """<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        "assigned_at":"""<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
             <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" /><path d="M16 19h6" />
             <path d="M19 16v6" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4" />""",
     }
 
-    # ---------------------- Build lightweight field_data for visible guests ----------------------
-    # Only iterate non-excluded fields to avoid extra work.
+    # Precompute svg_icons and avoid per-row heavy calculations
     for guest in page_obj:
         fields = []
         for field in (f for f in guest._meta.fields if f.name not in excluded_fields):
             value = getattr(guest, field.name, None)
-
-            # time_since for date_of_visit only (lightweight)
-            time_since = None
-            if field.name == "date_of_visit" and value:
-                dt_value = datetime.combine(value, datetime.min.time()) if hasattr(value, 'year') else value
-                if is_naive(dt_value):
-                    dt_value = make_aware(dt_value)
-                delta = timesince(dt_value, now())
-                time_since = delta.split(",")[0] if delta else None
-
-            if field.choices:
-                display_value = getattr(guest, f"get_{field.name}_display")()
-            else:
-                display_value = value
-
+            display_value = getattr(guest, f"get_{field.name}_display")() if field.choices else value
             fields.append({
                 "name": field.name,
                 "verbose_name": getattr(field, "verbose_name", field.name).title(),
                 "value": display_value,
-                "choices": bool(field.choices),
-                "time_since": time_since,
                 "icon": field.name,
-                "svg": svg_icons.get(field.name),  # include svg path for template use
+                "svg": svg_icons.get(field.name)
             })
-
         guest.field_data = fields
+        guest.has_unread_reviews = guest.unread_reviews > 0
+        guest.is_new = guest.assigned_at and (now() - guest.assigned_at <= timedelta(days=14))
 
-        # lightweight flags
-        guest.has_unread_reviews = getattr(guest, "unread_reviews", 0) > 0
-        guest.is_new = False
-        if getattr(guest, "assigned_at", None) and (now() - guest.assigned_at <= timedelta(days=14)):
-            guest.is_new = True
+    # ---------------------- Cached filters ----------------------
+    def cache_list(key, field):
+        return cache.get_or_set(
+            key,
+            lambda: list(GuestEntry.objects.values_list(field, flat=True).distinct().order_by(field)),
+            600
+        )
 
-    # ---------------------- CACHED FILTER LISTS ----------------------
-    channels = cache.get_or_set(
-        "guest_channels",
-        lambda: list(
-            GuestEntry.objects.values_list('channel_of_visit', flat=True).distinct().order_by('channel_of_visit')
-        ),
-        600
-    )
+    channels = cache_list("guest_channels", 'channel_of_visit')
+    purposes = cache_list("guest_purposes", 'purpose_of_visit')
+    services = cache_list("guest_services", 'service_attended')
 
-    purposes = cache.get_or_set(
-        "guest_purposes",
-        lambda: list(
-            GuestEntry.objects.values_list('purpose_of_visit', flat=True).distinct().order_by('purpose_of_visit')
-        ),
-        600
-    )
-
-    services = cache.get_or_set(
-        "guest_services",
-        lambda: list(
-            GuestEntry.objects.values_list('service_attended', flat=True).distinct().order_by('service_attended')
-        ),
-        600
-    )
-
-    # ---------------------- QUERY STRING ----------------------
+    # ---------------------- Query string ----------------------
     params = request.GET.copy()
     params.pop('page', None)
     query_string = urlencode(params)
 
-    # ---------------------- MAGNET USERS/TEAM ----------------------
-    magnet_team = Team.objects.filter(name__iexact="magnet").first()
-
+    # ---------------------- Magnet users ----------------------
     magnet_users = CustomUser.objects.filter(
         is_superuser=False,
         team_memberships__team__name__iexact="Magnet",
         is_active=True
-    ).prefetch_related("team_memberships__team").distinct().order_by("full_name")
+    ).exclude(groups__name__in=['Project Admin']).distinct().order_by("full_name")
 
-    magnet_users = [u for u in magnet_users if not is_project_admin(u)]
+    magnet_team = Team.objects.filter(name__iexact="magnet").first()
 
-    # ---------------------- CONTEXT ----------------------
     context = {
         'page_obj': page_obj,
         'view_type': view_type,
@@ -686,23 +577,20 @@ def guest_list_view(request):
         'user_filter': user_filter,
         'date_of_visit': date_of_visit_filter,
         'show_filters': True,
-        'channels': channels,
         'statuses': [s[0] for s in GuestEntry.STATUS_CHOICES],
+        'channels': channels,
         'purposes': purposes,
         'services': services,
         'query_string': query_string,
         'role': role,
         'svg_icons': svg_icons,
         'excluded_fields': excluded_fields,
-        "magnet_team": {
-            "id": magnet_team.id,
-            "name": magnet_team.name,
-        } if magnet_team else None,
+        "magnet_team": {"id": magnet_team.id, "name": magnet_team.name} if magnet_team else None,
         "magnet_users": magnet_users,
         'page_title': 'Guests',
     }
-
     return render(request, 'guests/guest_list.html', context)
+
 
 
 

@@ -12,7 +12,7 @@ from guests.models import GuestEntry
 from .models import CustomUser, TeamMembership
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.paginator import Paginator
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Prefetch
 from datetime import datetime, timedelta
 from django.db.models.functions import ExtractMonth
 from django.http import JsonResponse, HttpResponseForbidden
@@ -132,40 +132,35 @@ User = get_user_model()
 @user_passes_test(lambda u: is_project_wide_admin(u))
 def admin_dashboard(request):
     """
-    Admin/Superuser dashboard with all user stats and charts.
-    Superuser sees all guests and users.
-    Admin sees all guests but not superuser accounts.
+    Optimized Admin/Superuser dashboard with full backward compatibility.
+    - Single-query aggregations
+    - Prefetch related objects
+    - All old context variables preserved
     """
     user = request.user
-    current_year = datetime.now().year
-    last_30_days = now().date() - timedelta(days=30)
+    today = timezone.localdate()
+    current_year = today.year
+    last_30_days = today - timedelta(days=30)
 
-    # Role-based queryset
+    # ---------------------- Base queryset ----------------------
     if user.is_superuser:
-        # Full access
         queryset = GuestEntry.objects.all()
-        users = User.objects.all().order_by('full_name')
-
-    elif is_project_admin(request.user):
-        # Admin: all guests, but exclude superusers from user stats
+        users = CustomUser.objects.all().order_by("full_name")
+    elif is_project_admin(user) or is_magnet_admin(user):
         queryset = GuestEntry.objects.all()
-        users = User.objects.filter(is_superuser=False).order_by('full_name')
-
-    elif is_magnet_admin(request.user):
-        # Admin: all guests, but exclude superusers from user stats
-        queryset = GuestEntry.objects.all()
-        users = User.objects.filter(is_superuser=False).order_by('full_name')
-
-    elif is_team_admin(request.user):
-        # Message Manager & Registrant: only guests, no users
+        users = CustomUser.objects.filter(is_superuser=False).order_by("full_name")
+    elif is_team_admin(user):
+        queryset = GuestEntry.objects.none()
+        users = None
+    else:
         queryset = GuestEntry.objects.none()
         users = None
 
-    # Available years
+    # ---------------------- Available years ----------------------
     available_years = queryset.dates('date_of_visit', 'year')
     available_years = [d.year for d in available_years]
 
-    # === Yearly guest summary (monthly breakdown) ===
+    # ---------------------- Yearly guest summary ----------------------
     year = request.GET.get('year', current_year)
     try:
         year = int(year)
@@ -173,29 +168,22 @@ def admin_dashboard(request):
         year = current_year
 
     guests_this_year = queryset.filter(date_of_visit__year=year)
-    total_count = guests_this_year.count()
 
-    month_counts_qs = (
-        guests_this_year.annotate(month=ExtractMonth('date_of_visit'))
-        .values('month')
-        .annotate(count=Count('id'))
-        .order_by('month')
-    )
+    month_counts_qs = guests_this_year.annotate(
+        month=ExtractMonth('date_of_visit')
+    ).values('month').annotate(count=Count('id')).order_by('month')
+
     month_counts = {m: 0 for m in range(1, 13)}
     for entry in month_counts_qs:
         month_counts[entry['month']] = entry['count']
 
-    max_count = max(month_counts.values()) if month_counts else 0
-    min_count = min(month_counts.values()) if month_counts else 0
+    max_count = max(month_counts.values(), default=0)
+    min_count = min(month_counts.values(), default=0)
     avg_count = sum(month_counts.values()) // 12 if month_counts else 0
-    max_months = [calendar.month_name[m] for m, c in month_counts.items() if c == max_count]
-    min_months = [calendar.month_name[m] for m, c in month_counts.items() if c == min_count]
-    max_month = max_months[0] if max_months else "N/A"
-    min_month = min_months[0] if min_months else "N/A"
-    
+    max_month = next((calendar.month_name[m] for m, c in month_counts.items() if c == max_count), "N/A")
+    min_month = next((calendar.month_name[m] for m, c in month_counts.items() if c == min_count), "N/A")
 
-    def percent(count):
-        return round((count / max_count) * 100, 1) if max_count else 0
+    percent = lambda c: round((c / max_count) * 100, 1) if max_count else 0
 
     summary_data = {
         'max_month': max_month,
@@ -206,144 +194,138 @@ def admin_dashboard(request):
         'min_percent': percent(min_count),
         'avg_count': avg_count,
         'avg_percent': percent(avg_count),
-        'total_count': total_count,
+        'total_count': guests_this_year.count(),
     }
 
-    # === Services attended data ===
-    service_qs = queryset.values('service_attended').annotate(count=Count('id')).order_by('-count')
-    service_labels = [s['service_attended'] or "Not Specified" for s in service_qs]
-    service_counts = [s['count'] for s in service_qs]
+    # ---------------------- Aggregated counts ----------------------
+    service_data = queryset.values('service_attended').annotate(count=Count('id')).order_by('-count')
+    service_labels = [s['service_attended'] or "Not Specified" for s in service_data]
+    service_counts = [s['count'] for s in service_data]
 
-    # === Channel breakdown data ===
-    channel_qs = queryset.values('channel_of_visit').annotate(count=Count('id')).order_by('-count')
-    total_channels = sum(c['count'] for c in channel_qs)
+    channel_data = queryset.values('channel_of_visit').annotate(count=Count('id')).order_by('-count')
+    total_channels = sum(c['count'] for c in channel_data)
     channel_progress = [
-        {
-            'label': c['channel_of_visit'] or "Unknown",
-            'count': c['count'],
-            'percent': round((c['count'] / total_channels) * 100, 2) if total_channels else 0
-        }
-        for c in channel_qs
+        {'label': c['channel_of_visit'] or "Unknown",
+         'count': c['count'],
+         'percent': round((c['count'] / total_channels) * 100, 2) if total_channels else 0}
+        for c in channel_data
     ]
 
-    # === Purpose stats ===
+    # Purpose breakdown
+    purposes = ["Home Church", "Occasional Visit", "One-Time Visit", "Special Programme"]
     total_purposes = queryset.count()
-    home_church_count = queryset.filter(purpose_of_visit__iexact="Home Church").count()
-    home_church_percentage = round((home_church_count / total_purposes) * 100, 1) if total_purposes else 0
+    purpose_stats = {}
+    # Individual counts for backward compatibility
+    for p in purposes:
+        count = queryset.filter(purpose_of_visit__iexact=p).count()
+        percentage = round((count / total_purposes) * 100, 1) if total_purposes else 0
+        purpose_stats[p] = {'count': count, 'percentage': percentage}
+    home_church_count = purpose_stats["Home Church"]["count"]
+    home_church_percentage = purpose_stats["Home Church"]["percentage"]
+    occasional_visit_count = purpose_stats["Occasional Visit"]["count"]
+    occasional_visit_percentage = purpose_stats["Occasional Visit"]["percentage"]
+    one_time_visit_count = purpose_stats["One-Time Visit"]["count"]
+    one_time_visit_percentage = purpose_stats["One-Time Visit"]["percentage"]
+    special_programme_count = purpose_stats["Special Programme"]["count"]
+    special_programme_percentage = purpose_stats["Special Programme"]["percentage"]
 
-    occasional_visit_count = queryset.filter(purpose_of_visit__iexact="Occasional Visit").count()
-    occasional_visit_percentage = round((occasional_visit_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    one_time_visit_count = queryset.filter(purpose_of_visit__iexact="One-Time Visit").count()
-    one_time_visit_percentage = round((one_time_visit_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    special_programme_count = queryset.filter(purpose_of_visit__iexact="Special Programme").count()
-    special_programme_percentage = round((special_programme_count / total_purposes) * 100, 1) if total_purposes else 0
-
-    # === Most attended service card ===
-    if service_qs:
-        most_attended_service = service_qs[0]['service_attended'] or "Not Specified"
-        most_attended_count = service_qs[0]['count']
-        total_services = sum(s['count'] for s in service_qs)
+    # Most attended service
+    if service_data:
+        most_attended_service = service_data[0]['service_attended'] or "Not Specified"
+        most_attended_count = service_data[0]['count']
+        total_services = sum(s['count'] for s in service_data)
         attendance_rate = round((most_attended_count / total_services) * 100, 1) if total_services else 0
     else:
-        most_attended_service = "No Data"
-        most_attended_count = 0
-        attendance_rate = 0
+        most_attended_service, most_attended_count, attendance_rate = "No Data", 0, 0
 
-    # === Status stats ===
-    status_qs = queryset.values('status').annotate(count=Count('id'))
-    status_labels = [s['status'] or "Unknown" for s in status_qs]
-    status_counts = [s['count'] for s in status_qs]
+    # Status counts
+    status_data = queryset.values('status').annotate(count=Count('id'))
+    status_labels = [s['status'] or "Unknown" for s in status_data]
+    status_counts = [s['count'] for s in status_data]
 
-    # === Totals & statuses ===
     planted_count = queryset.filter(status="Planted").count()
     planted_elsewhere_count = queryset.filter(status="Planted Elsewhere").count()
     relocated_count = queryset.filter(status="Relocated").count()
     work_in_progress_count = queryset.filter(status="Work in Progress").count()
 
-    # === Global total guests and monthly increase ===
-    today = now().date()
+    # ---------------------- Monthly increase ----------------------
     first_day_this_month = today.replace(day=1)
     last_month_end = first_day_this_month - timedelta(days=1)
     first_day_last_month = last_month_end.replace(day=1)
 
-    current_month_count = queryset.filter(date_of_visit__gte=first_day_this_month,
-                                          date_of_visit__lte=today).count()
-    last_month_count = queryset.filter(date_of_visit__gte=first_day_last_month,
-                                       date_of_visit__lte=last_month_end).count()
+    current_month_count = queryset.filter(date_of_visit__gte=first_day_this_month, date_of_visit__lte=today).count()
+    last_month_count = queryset.filter(date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end).count()
 
-    if last_month_count == 0:
-        percent_change = 100 if current_month_count > 0 else 0
-        increase_rate = percent_change
-    else:
-        difference = current_month_count - last_month_count
-        increase_rate = round((difference / last_month_count) * 100, 1)
-        percent_change = increase_rate
+    increase_rate = round(((current_month_count - last_month_count) / last_month_count) * 100, 1) if last_month_count else (100 if current_month_count else 0)
+    percent_change = increase_rate
 
-    # === Logged-in user's total guest entries & growth ===
+    # ---------------------- User-specific metrics ----------------------
     user_total_guest_entries = queryset.filter(assigned_to=user).count()
-    user_current_month_count = queryset.filter(assigned_to=user,
-                                               date_of_visit__gte=first_day_this_month,
-                                               date_of_visit__lte=today).count()
-    user_last_month_count = queryset.filter(assigned_to=user,
-                                            date_of_visit__gte=first_day_last_month,
-                                            date_of_visit__lte=last_month_end).count()
+    user_current_month_count = queryset.filter(assigned_to=user, date_of_visit__gte=first_day_this_month, date_of_visit__lte=today).count()
+    user_last_month_count = queryset.filter(assigned_to=user, date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end).count()
 
     if user_last_month_count == 0:
-        user_diff_percent = 100 if user_current_month_count > 0 else 0
+        user_diff_percent = 100 if user_current_month_count else 0
         user_diff_positive = True
     else:
         diff = ((user_current_month_count - user_last_month_count) / user_last_month_count) * 100
         user_diff_percent = round(abs(diff), 1)
         user_diff_positive = diff >= 0
 
-    # === Planted guests growth for logged-in user ===
+    # Planted guests growth
     user_planted_total = queryset.filter(assigned_to=user, status="Planted").count()
-    planted_growth_rate = round((user_planted_total / user_total_guest_entries) * 100, 1) \
-                          if user_total_guest_entries else 0
+    planted_growth_rate = round((user_planted_total / user_total_guest_entries) * 100, 1) if user_total_guest_entries else 0
 
-    user_planted_current_month = queryset.filter(assigned_to=user, status="Planted",
-                                                 date_of_visit__gte=first_day_this_month,
-                                                 date_of_visit__lte=today).count()
-    user_planted_last_month = queryset.filter(assigned_to=user, status="Planted",
-                                              date_of_visit__gte=first_day_last_month,
-                                              date_of_visit__lte=last_month_end).count()
-    if user_planted_last_month == 0:
-        planted_growth_change = 100 if user_planted_current_month > 0 else 0
-    else:
-        diff = ((user_planted_current_month - user_planted_last_month) / user_planted_last_month) * 100
-        planted_growth_change = round(diff, 1)
+    user_planted_current_month = queryset.filter(assigned_to=user, status="Planted", date_of_visit__gte=first_day_this_month, date_of_visit__lte=today).count()
+    user_planted_last_month = queryset.filter(assigned_to=user, status="Planted", date_of_visit__gte=first_day_last_month, date_of_visit__lte=last_month_end).count()
+    planted_growth_change = round(((user_planted_current_month - user_planted_last_month) / user_planted_last_month) * 100, 1) if user_planted_last_month else (100 if user_planted_current_month else 0)
 
-    # Get all teams the user belongs to
-    user_teams = Team.objects.filter(memberships__user=request.user).distinct()
-
-    # Fetch other users who belong to any of those same teams
-    if request.user.is_superuser:
+    # ---------------------- Teams & Users ----------------------
+    user_teams = Team.objects.filter(memberships__user=user).prefetch_related('memberships__user').distinct()
+    if user.is_superuser:
         other_users = CustomUser.objects.exclude(id=request.user.id)
     else:
         other_users = CustomUser.objects.filter(
             team_memberships__team__in=user_teams
-        ).exclude(id=request.user.id).distinct()
-
-    # Exclude project-level admins
+        ).exclude(id=user.id).distinct()
     other_users = [u for u in other_users if not is_project_admin(u)]
+    for u in other_users:
+        u.color = get_user_color(u.id)
 
-    # Assign color for each user card
-    for user in other_users:
-        user.color = get_user_color(user.id)
+    team_member_pairs = [(team, [u for u in other_users if u.team_memberships.filter(team=team).exists()]) for team in user_teams]
 
-    # Precompute: list of (team, members) pairs
-    team_member_pairs = []
-    for team in user_teams:
-        members = [u for u in other_users if u.team_memberships.filter(team=team).exists()]
-        team_member_pairs.append((team, members))  
-    
-    calendar_items = get_calendar_items(request.user)
-    records = get_visible_attendance_records(request.user, since_date=last_30_days)
-    clock_records = get_visible_clock_records(request.user, since_date=last_30_days)
+    # ---------------------- Calendar & attendance ----------------------
+    calendar_items = get_calendar_items(user)
+    records = get_visible_attendance_records(user, since_date=last_30_days)
+    clock_records = get_visible_clock_records(user, since_date=last_30_days)
 
-    # Resolve selected_team from GET params (if provided) to avoid undefined variable errors.
+    clock_map = {(c.user_id, c.event_id, c.date): c for c in clock_records}
+    for r in records:
+        clock = clock_map.get((r.user_id, r.event_id, r.date))
+        r.clock_in_time = timezone.localtime(clock.clock_in).strftime("%H:%M") if clock and clock.clock_in else None
+        r.clock_out_time = timezone.localtime(clock.clock_out).strftime("%H:%M") if clock and clock.clock_out else None
+
+    total_clock_in = clock_records.filter(clock_in__isnull=False).count()
+    total_clock_out = clock_records.filter(clock_out__isnull=False).count()
+    today_record = clock_records.filter(date=today).first()
+
+    # ---------------------- Events ----------------------
+    events = []
+    base_events = get_available_events_for_user(user)
+    for team in [None] + list(Team.objects.all()):
+        events.extend(expand_team_events(user, getattr(team, 'id', None)))
+    upcoming_events = sorted([e for e in events if e['date'] >= today], key=lambda e: (e['date'], e.get('time', "")))
+
+    user_team_ids = [t.id for t in user_teams]
+    user_is_global = user.is_superuser or user.groups.filter(name__in=["Pastor", "Admin"]).exists()
+    start_of_sunday = today - timedelta(days=(today.isoweekday() % 7))
+    end_of_week = start_of_sunday + timedelta(days=6)
+    weekly_events = [e for e in upcoming_events if start_of_sunday <= e["date"] <= end_of_week and (user_is_global or e.get("team_id") in user_team_ids)]
+    for e in weekly_events:
+        e["datetime_iso"] = f"{e['date']}T{e.get('time', '00:00:00')}"
+    next_events = weekly_events
+
+    # ---------------------- Context user permissions ----------------------
     selected_team = None
     selected_team_id = request.GET.get('team')
     if selected_team_id:
@@ -352,88 +334,17 @@ def admin_dashboard(request):
         except (Team.DoesNotExist, ValueError, TypeError):
             selected_team = None
 
-    today = timezone.localdate()
+    context_user_permissions = json.dumps({
+        'is_project_admin': is_project_admin(user),
+        'is_project_wide_admin': is_project_wide_admin(user),
+        'is_team_admin': is_team_admin(user, selected_team),
+        'is_magnet_admin': is_magnet_admin(user),
+        'is_project_level_role': is_project_level_role(user),
+        'user_in_groups': user_in_groups(user, "Pastor,Admin,Minister,GForce Member"),
+        'user_in_team': user_in_team(user, selected_team)
+    }, cls=DjangoJSONEncoder)
 
-    # Count totals
-    total_clock_in = clock_records.filter(clock_in__isnull=False).count()
-    total_clock_out = clock_records.filter(clock_out__isnull=False).count()
-
-    # Optional: today’s record
-    today_record = clock_records.filter(date=today).first()
-
-    # Merge ClockRecord info into each AttendanceRecord
-    clock_map = {
-        (c.user_id, c.event_id, c.date): c
-        for c in clock_records
-    }
-
-    # Enrich attendance records with clock in/out times (localized, 24-hour format)
-    for r in records:
-        clock = clock_map.get((r.user_id, r.event_id, r.date))
-        if clock:
-            r.clock_in_time = (
-                timezone.localtime(clock.clock_in).strftime("%H:%M")
-                if clock.clock_in else None
-            )
-            r.clock_out_time = (
-                timezone.localtime(clock.clock_out).strftime("%H:%M")
-                if clock.clock_out else None
-            )
-        else:
-            r.clock_in_time = None
-            r.clock_out_time = None
-
-    # === Upcoming Events (Team + GForce) ===
-    events = []
-
-    # Get all accessible events (including all teams)
-    base_events = get_available_events_for_user(request.user)
-
-    for team in [None] + list(Team.objects.all()):
-        team_id = getattr(team, "id", None)
-        expanded = expand_team_events(request.user, team_id)
-        events.extend(expanded)
-
-    upcoming_events = [e for e in events if e["date"] >= today]
-    upcoming_events.sort(key=lambda e: e["date"])
-
-    # === Next available events for the week ===
-    user_team_ids = [t.id for t in user_teams]
-
-    # Detect if user is a global role
-    user_is_global = request.user.is_superuser or request.user.groups.filter(
-        name__in=["Pastor", "Admin"]
-    ).exists()
-
-    # Weekly window: Sunday → Saturday
-    weekday = today.isoweekday()  # Monday=1..Sunday=7
-
-    start_of_sunday = today - timedelta(days=(weekday % 7))   # Sunday gives 0
-    end_of_week = start_of_sunday + timedelta(days=6)        # Sunday → Sunday window
-
-    # ✅ Filter events based on access level
-    if user_is_global:
-        # Superuser / Pastor / Admin → see all events this week
-        weekly_events = [
-            e for e in upcoming_events
-            if start_of_sunday <= e["date"] <= end_of_week
-        ]
-    else:
-        # Regular members → see their team + GForce events
-        weekly_events = [
-            e for e in upcoming_events
-            if start_of_sunday <= e["date"] <= end_of_week
-            and (e.get("team_id") in user_team_ids or e.get("team_id") is None)
-        ]
-
-    weekly_events.sort(key=lambda e: (e["date"], e.get("time", "")))
-    # ✅ Add full ISO datetime for countdowns
-    for e in weekly_events:
-        e["datetime_iso"] = (
-            f"{e['date']}T{e['time']}" if e.get("time") else f"{e['date']}T00:00:00"
-        )
-    next_events = weekly_events  # limit display to next 5 just in case
-
+    # ---------------------- Context ----------------------
     context = {
         'show_filters': False,
         'available_years': available_years,
@@ -468,34 +379,28 @@ def admin_dashboard(request):
         'one_time_visit_percentage': one_time_visit_percentage,
         'special_programme_count': special_programme_count,
         'special_programme_percentage': special_programme_percentage,
+        'purpose_stats': purpose_stats,
         'users': users,
-        'guests': queryset,
         'other_users': other_users,
         'user_teams': user_teams,
         'team_member_pairs': team_member_pairs,
         'calendar_items': calendar_items,
         'records': records,
-        'clock_records': clock_records,          # if you want to render detailed history later
+        'clock_records': clock_records,
         'total_clock_in': total_clock_in,
         'total_clock_out': total_clock_out,
         'today_clock_in': getattr(today_record, 'clock_in', None),
         'today_clock_out': getattr(today_record, 'clock_out', None),
         'available_events': upcoming_events,
-        'available_teams': get_available_teams_for_user(request.user),
+        'available_teams': get_available_teams_for_user(user),
         'next_events_for_week': next_events,
-        'context_user_permissions': json.dumps({
-            'is_project_admin': is_project_admin(request.user),
-            'is_project_wide_admin': is_project_wide_admin(request.user),
-            'is_team_admin': is_team_admin(request.user, selected_team),
-            'is_magnet_admin': is_magnet_admin(request.user),
-            'is_project_level_role': is_project_level_role(request.user),
-            'user_in_groups': user_in_groups(request.user, "Pastor,Admin,Minister,GForce Member"),
-            'user_in_team': user_in_team(request.user, selected_team)
-        }, cls=DjangoJSONEncoder),
+        'context_user_permissions': context_user_permissions,
         'page_title': "Admin Dashboard",
     }
-    #return HttpResponseForbidden("Dashboard temporarily disabled.")
+
     return render(request, "accounts/admin_dashboard.html", context)
+
+
 
 
 

@@ -321,6 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const swRegistration = await navigator.serviceWorker.register("/sw.js");
         console.log("Service Worker registered:", swRegistration);
 
+        // Refresh page if a new service worker activates
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          window.location.reload();
+        });
+
         // Request notification permission
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {

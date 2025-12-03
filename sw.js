@@ -1,10 +1,12 @@
 const STATIC_CACHE = "static-cache-v1";
 
+// Install
 self.addEventListener("install", (event) => {
   console.log("Service Worker installed");
   self.skipWaiting();
 });
 
+// Activate
 self.addEventListener("activate", (event) => {
   console.log("Service Worker activated");
 
@@ -17,9 +19,22 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Fetch
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
   // Prevent SW from touching WebSocket upgrade requests
   if (event.request.headers.get("upgrade") === "websocket") return;
+
+  // ❌ Prevent caching Chrome extensions
+  if (url.protocol.includes("chrome-extension")) {
+    return;
+  }
+
+  // ❌ Prevent caching external CDN requests (Fixes your warnings)
+  if (url.origin !== self.location.origin) {
+    return event.respondWith(fetch(event.request));
+  }
 
   // Cache CSS, JS, images, fonts
   if (
@@ -29,9 +44,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
         const cached = await cache.match(event.request);
+
         const fetchPromise = fetch(event.request)
           .then((response) => {
-            cache.put(event.request, response.clone());
+            // Only cache 200 OK responses
+            if (response.status === 200) {
+              cache.put(event.request, response.clone());
+            }
             return response;
           })
           .catch(() => cached);
@@ -42,6 +61,7 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+// Push notifications
 self.addEventListener("push", (event) => {
   let data = {};
   if (event.data) data = event.data.json();
@@ -54,13 +74,16 @@ self.addEventListener("push", (event) => {
     data: data.url || "/",
   };
 
-  if (data.sound) options.sound = `/static/sounds/${data.sound}.mp3`;
+  if (data.sound) {
+    options.sound = `/static/sounds/${data.sound}.mp3`;
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title || "Notification", options)
   );
 });
 
+// Notification click
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
