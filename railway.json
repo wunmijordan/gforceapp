@@ -4,11 +4,11 @@
     "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
   },
   "deploy": {
-    "startCommand": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 --access-log - gforceapp.asgi:application",
+    "startCommand": "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:$PORT --log-level info --access-logfile '-' --timeout 120 --keep-alive 5",
     "restartPolicyType": "ON_FAILURE"
   },
   "deployProcesses": {
-    "web": "daphne -b 0.0.0.0 -p $PORT --ping-interval 30 --ping-timeout 120 --access-log - gforceapp.asgi:application",
+    "web": "gunicorn gforceapp.asgi:application -k uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:$PORT --log-level info --access-logfile '-' --timeout 120 --keep-alive 5",
     "scheduler": "python manage.py start_scheduler"
   }
 }

@@ -126,6 +126,11 @@ class ChatMessage(models.Model):
       related_name="seen_messages",
       blank=True
   )
+  read_by = models.ManyToManyField(
+      settings.AUTH_USER_MODEL,
+      related_name="read_messages",
+      blank=True
+  )
 
   # Attachments
   file = models.CharField(max_length=5000, blank=True, null=True)

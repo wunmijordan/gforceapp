@@ -1300,6 +1300,14 @@ Reduce padding on tablets so items fit */
   display: none;
 }
 
+.online-badge {
+  display: none; /* default hidden */
+}
+.user-card[data-online="true"] .online-badge {
+  display: block;
+}
+
+
 /* ================== RESPONSIVE ================== */
 @media (max-width: 768px) {
   #activeUserListWrapper.visible {

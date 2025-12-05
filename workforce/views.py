@@ -249,6 +249,7 @@ def chat_room(request):
                 "role": get_combined_role(u, selected_team),
                 "color": get_user_color(u.id),
                 "team_name": selected_team.name if selected_team else "",
+                "is_online": u.is_online,
                 "guests": [
                     {
                         "id": g.id,

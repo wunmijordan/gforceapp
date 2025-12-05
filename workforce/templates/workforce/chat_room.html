@@ -35,6 +35,10 @@
               <path d="M15 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M17 10h2a2 2 0 0 1 2 2v1" />
               <path d="M5 5a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M3 13v-1a2 2 0 0 1 2 -2h2" />
             </svg>
+            <span id="total-unread-toggler"
+                  class="badge-lt text-warning"
+                  style="display:none; position:absolute; top:-2px; right:-2px; font-size:0.65rem; min-width:18px; height:18px; display:flex; align-items:center; justify-content:center;">
+            </span>
           </button>
         </div>
 
@@ -257,14 +261,25 @@
                 </svg>
               </span>
               <span class="nav-link-title"> My ChatRooms </span>
+              <span id="total-unread-chatrooms"
+                    class="badge bg-gray-lt text-warning rounded-pill"
+                    style="display:none; margin-left:8px; font-size:0.7rem; min-width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center;">
+              </span>
             </a>
-            <div id="chatroomsContainer" class="chatrooms-collapsible" style="display:none; background: #1F2937 !important; border: none; width: 100%;">
+            <div id="chatroomsContainer" class="chatrooms-collapsible scrollable" style="display:none; background: #1F2937 !important; border: none; width: 100%; overflow-y: auto;">
               <div id="teamSelector" class="team-selector d-flex flex-column mb-3 px-2">
                 {% for team in teams %}
                   <button class="team-btn text-white border-0 py-2 px-3 text-center w-100 {{ team.color_class }} position-relative"
                           data-team-id="{{ team.id }}"
                           data-team-color-class="{{ team.color_class }}"
                           data-team-name="{{ team.name }}">
+
+                    <!-- Unread badge -->
+                    <span class="team-badge position-absolute text-warning badge rounded-pill bg-gray"
+                          style="display:none; font-size: 0.75rem; padding: 2px 6px;
+                                  top: -5px; right: 0;"
+                          data-team-badge="{{ team.id }}">
+                    </span>
 
                     <!-- Inactive icon -->
                     <svg class="team-icon team-icon-inactive btn-animate-icon" style="position:absolute; left:8px; top:50%; transform:translateY(-50%);"
@@ -308,7 +323,7 @@
   <div class="page-body" style="flex:1 1 auto; display:flex; overflow:hidden;">
     <div class="container-xl d-flex flex-fill border-0 p-0" style="flex:1 1 auto; display:flex; flex-direction:column; overflow:hidden;">
       <div class="card chat-card flex-fill" style="height:100%; overflow:hidden;">
-        <div class="row g-0 flex-fill" style="height:100%; overflow:hidden;">
+        <div class="row g-0 flex-fill" style="height:100%;">
 
           <!-- DESKTOP LEFT COLUMN -->
           <div class="d-none d-lg-flex col-12 col-lg-5 col-xl-3 border-end flex-column" style="display:flex; flex-direction:column; height:100%;">
@@ -361,13 +376,20 @@
             <!-- Desktop User list -->
             <div class="card-body p-0 mt-0 mb-3 scrollable flex-fill">
               <div class="row g-2">
-                <!-- Team Buttons Strip -->
+                <!-- Team Buttons Switcher -->
                 <div id="teamSelector" class="team-selector d-flex flex-column mb-3">
                   {% for team in teams %}
-                    <button class="team-btn text-white border-0 py-2 px-3 text-center {{ team.color_class }} position-relative"
+                    <button class="team-btn text-white border-0 py-2 px-3 text-center w-100 {{ team.color_class }} position-relative"
                             data-team-id="{{ team.id }}"
                             data-team-color-class="{{ team.color_class }}"
                             data-team-name="{{ team.name }}">
+
+                      <!-- Unread badge -->
+                      <span class="team-badge position-absolute text-warning badge rounded-pill bg-gray"
+                            style="display:none; font-size: 0.75rem; padding: 2px 6px;
+                                    top: 50%; right: 6px;"
+                            data-team-badge="{{ team.id }}">
+                      </span>
 
                       <!-- Inactive icon (visible when NOT active) -->
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" 
@@ -398,10 +420,10 @@
                   {% for team in teams %}
                     <div id="team-users-{{ team.id }}" class="team-users d-none">
                       {% for user in team.enriched_users %}
-                        <div class="card shadow-sm border-0 mb-2 {{ user.color }} user-card">
+                        <div class="card shadow-sm border-0 mb-2 {{ user.color }} user-card" data-user-id="{{ user.id }}" data-online="{{ user.is_online }}">
                           <div class="card-body py-2 px-3 d-flex align-items-center">
                             <!-- Avatar -->
-                            <div class="me-3">
+                            <div class="me-3 position-relative">
                               <a href="tel:{{ user.phone_number }}">
                                 {% if user.image %}
                                   <span class="avatar rounded"
@@ -417,6 +439,8 @@
                                   </span>
                                 {% endif %}
                               </a>
+                              <span class="online-badge position-absolute top-0 end-0 rounded-circle"
+                                    style="width:10px; height:10px; background: #22c55e; border: 1px solid #111;"></span>
                             </div>
 
                             <!-- Name + Last Message -->
@@ -682,6 +706,13 @@
               </div>
             </div>
 
+            <!-- Typing indicator -->
+            <span class="team-typing position-absolute bottom-0 start-50 translate-middle-x text-xs text-muted"
+                  style="display:none;"
+                  data-team-typing="{{ team.id }}">
+              typing…
+            </span>
+
             {% if not request.user|has_group:"Demo" or request.user.is_superuser %} 
               <!-- Message Input --> 
               <div class="card-footer border-0"> 
@@ -934,6 +965,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     chatSocket.onopen = () => {
       console.log("✅ WS connected to", teamParam || "central");
+      chatSocket.send(JSON.stringify({
+        type: "get_unread_counts"
+      }));
     };
 
     chatSocket.onclose = (e) => {
@@ -949,8 +983,13 @@ document.addEventListener("DOMContentLoaded", () => {
     chatSocket.onmessage = (e) => {
       const data = JSON.parse(e.data);
 
-      // 🔍 Debug log
+      const incomingTeam = (data.team_id === null || data.team_id === undefined) ? "central" : String(data.team_id);
+
+      // Normalize active team for comparison: if activeTeamId is null/undefined -> central
+      const normalizedActive = (activeTeamId === null || activeTeamId === undefined) ? "central" : String(activeTeamId);
+
       console.log("📩 Incoming WebSocket data:", data);
+      console.log("Incoming team:", incomingTeam, "Normalized active:", normalizedActive);
 
       // Update your local USER_GUESTS
       if (data.guest && data.guest.assigned_user) {
@@ -958,7 +997,53 @@ document.addEventListener("DOMContentLoaded", () => {
         if (idx !== -1) USER_GUESTS[idx].assigned_user = data.guest.assigned_user;
       }
 
+      // Handle online/offline updates
+      if (data.type === "user_online_status") {
+        const card = document.querySelector(`.user-card[data-user-id="${data.user_id}"]`);
+        if (card) {
+          card.dataset.online = data.is_online ? "true" : "false";
+        }
+        updateBannerOnlineCount();
+      }
+
+      if (data.type == "mark_read") {
+       // await self.mark_team_read(data.get("team_id"))
+        //await self.send_unread_counts()
+        return
+      }
+
+      if (data.type === "unread_counts") {
+        Object.entries(data.counts).forEach(([teamId, count]) => {
+            UNREAD[teamId] = count;
+            updateTeamBadge(teamId);
+        });
+        updateTotalUnreadBadges();
+      }
+
+      // Typing event
+      if (data.type === "typing") {
+          if (incomingTeam !== normalizedActive) {
+              showTeamTyping(incomingTeam);
+          }
+          return;
+      }
+
       if (data.type === "chat_message" || data.message) {
+
+        //if (!incomingTeam) return;
+
+        // If message is for another non-central team -> increment unread
+        if (incomingTeam !== normalizedActive) {
+          // don't show unread badges for central
+          if (incomingTeam !== "central") {
+            UNREAD[incomingTeam] = (UNREAD[incomingTeam] || 0) + 1;
+            updateTeamBadge(incomingTeam);
+            updateTotalUnreadBadges();
+            flashTeamButton(incomingTeam);
+          }
+          return;
+        }
+
         appendMessage(data);
         return;
       }
@@ -1053,6 +1138,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // ✅ Initial connection (central)
   connectSocket(null);
 
+  // Update banner to show online count
+  function updateBannerOnlineCount() {
+    const badge = document.getElementById("online-count-badge");
+    if (!badge) return;
+
+    let cards;
+
+    // If in a specific team → count ONLY that team's visible users
+    if (currentTeam) {
+        cards = document.querySelectorAll(`#team-users-${currentTeam} .user-card[data-online="true"]`);
+    } 
+    // No team selected → count ALL users (central room)
+    else {
+        cards = document.querySelectorAll(`.user-card[data-online="true"]`);
+    }
+
+    const count = cards.length;
+
+    if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = "inline-block";
+    } else {
+        badge.style.display = "none";
+    }
+  }
+
   function updateStickyHeaderPosition() {
     // Only account for the user strip height
     const stripHeight = wrapper.classList.contains("visible") ? wrapper.offsetHeight : 0;
@@ -1063,6 +1174,17 @@ document.addEventListener("DOMContentLoaded", () => {
   banner.id = "chatRoomBanner";
   banner.className = "chat-room-banner chat-room-banner-gradient";
   banner.innerHTML = `<div class="banner-inner"><span class="banner-text">GForce ChatRoom</span></div>`;
+  const onlineBadge = document.createElement("span");
+  onlineBadge.id = "online-count-badge";
+  onlineBadge.className = "badge bg-lime text-dark fw-bold";
+  onlineBadge.style.cssText = `
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      display:none;
+  `;
+  banner.appendChild(onlineBadge);
   chatContainer.prepend(banner);
 
   // Make banner clickable
@@ -1149,11 +1271,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (currentTeam === teamId && wrapper.classList.contains("visible")) {
         hideTeamUsers();
         currentTeam = null;
+        updateBannerOnlineCount();
         return;
       }
 
       currentTeam = teamId;
       showTeamUsers(teamId);
+      updateBannerOnlineCount();
     });
   });
 
@@ -1308,9 +1432,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Render ALL users (from DB, not grouped teams)
   const allCards = USERS.map(u => `
-    <div class="card shadow-sm border-0 mb-2 ${u.color} user-card">
+    <div class="card shadow-sm border-0 mb-2 ${u.color} user-card" data-user-id="${u.id}" data-online="${u.is_online}">
       <div class="card-body py-2 px-3 d-flex align-items-center">
-        <div class="me-3">
+        <div class="me-3 position-relative">
           <a href="tel:${u.phone_number}">
             ${
               u.image
@@ -1326,6 +1450,8 @@ document.addEventListener("DOMContentLoaded", () => {
                   </span>`
             }
           </a>
+          <span class="online-badge position-absolute top-0 end-0 rounded-circle"
+                style="width:10px; height:10px; background: #22c55e; border: 1px solid #111;"></span>
         </div>
         <div class="flex-grow-1">
           <div class="fw-bold text-truncate" style="color: var(--tblr-${u.color});">
@@ -1339,6 +1465,82 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Active team state
   let activeTeamId = null;
+  const UNREAD = {};
+  const TYPING_TIMEOUTS = {};
+  let typingTimer;
+
+  chatInput.addEventListener("input", () => {
+      chatSocket.send(JSON.stringify({
+          type: "typing",
+          team_id: activeTeamId
+      }));
+  });
+
+  teamButtons.forEach(btn => {
+      const id = btn.dataset.teamId;
+      UNREAD[id] = 0;
+  });
+
+  function updateTeamBadge(teamId) {
+    const badge = document.querySelector(`[data-team-badge="${teamId}"]`);
+    const count = UNREAD[teamId] || 0;
+
+    if (!badge) {
+        // Try again shortly in case layout just changed
+        setTimeout(() => updateTeamBadge(teamId), 150);
+        return;
+    }
+    badge.style.display = count > 0 ? "inline-block" : "none";
+    badge.textContent = count;
+    console.log("Updating badge for team", teamId, "count:", count);
+  }
+
+  // === GLOBAL UNREAD BADGES ===
+  function computeTotalUnread() {
+    return Object.values(UNREAD).reduce((s, v) => s + (parseInt(v) || 0), 0);
+  }
+
+  function setTotalBadge(el, count) {
+    if (!el) return;
+    if (!count || count <= 0) {
+        el.style.display = "none";
+        el.textContent = "";
+        return;
+    }
+    el.textContent = count > 99 ? "99+" : count;
+    el.style.display = "";
+  }
+
+  function updateTotalUnreadBadges() {
+    const total = computeTotalUnread();
+    setTotalBadge(document.getElementById("total-unread-toggler"), total);
+    setTotalBadge(document.getElementById("total-unread-chatrooms"), total);
+  }
+
+  function showTeamTyping(teamId) {
+    const el = document.querySelector(`[data-team-typing="${teamId}"]`);
+    if (!el) return;
+
+    el.style.display = "inline";
+
+    // Clear previous timeout
+    if (TYPING_TIMEOUTS[teamId]) {
+        clearTimeout(TYPING_TIMEOUTS[teamId]);
+    }
+
+    // Hide after 3s
+    TYPING_TIMEOUTS[teamId] = setTimeout(() => {
+        el.style.display = "none";
+    }, 3000);
+  }
+
+  function flashTeamButton(teamId) {
+    const btn = document.querySelector(`.team-btn[data-team-id="${teamId}"]`);
+    if (!btn) return;
+
+    btn.classList.add("flash");
+    setTimeout(() => btn.classList.remove("flash"), 600);
+  }
 
   // Render user cards
   function renderUserList(cardsArray) {
@@ -1417,6 +1619,14 @@ document.addEventListener("DOMContentLoaded", () => {
       teamButtons.forEach(b => b.classList.remove("active-team"));
       btn.classList.add("active-team");
       activeTeamId = teamId;
+      // Reset unread
+      UNREAD[teamId] = 0;
+      updateTeamBadge(teamId);
+      updateTotalUnreadBadges();
+      chatSocket.send(JSON.stringify({
+        type: "mark_read",
+        team_id: teamId
+      }));
 
       const cards = teamSections[teamId] || [];
       wrapper.className = `team-user-strip ${teamColor}`;

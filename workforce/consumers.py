@@ -2,6 +2,7 @@ import json, re, urllib.parse, logging, hashlib
 from datetime import timedelta
 from django.utils.timezone import now
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -134,30 +135,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # ---------- WebSocket Lifecycle ----------
     async def connect(self):
         from .models import Team
-        # Parse team from querystring, default = central
+        import urllib.parse
+
+        self.user = self.scope["user"]
+
+        # Parse team from querystring (no leading '?')
         qs = self.scope.get("query_string", b"").decode()
         params = urllib.parse.parse_qs(qs)
         team_slug = params.get("team", [None])[0] or params.get("team_id", [None])[0]
 
         self.team = None
-        self.room_group_name = "chat_central"
+        self.room_group_name = None
 
+        # ALWAYS join central room so broadcasts to chat_central reach everyone
+        await self.channel_layer.group_add("chat_central", self.channel_name)
+
+        # If team provided, try to find it and join its group too
+        team = None
         if team_slug:
-            # team provided could be id or slug/name — try id first
-            team = None
             if team_slug.isdigit():
                 team = await sync_to_async(Team.objects.filter(id=int(team_slug)).first)()
             if not team:
                 team = await sync_to_async(Team.objects.filter(name__iexact=team_slug).first)()
 
-            if team:
-                self.team = team
-                self.room_group_name = f"chat_team_{team.id}"
+        if team:
+            self.team = team
+            self.room_group_name = f"chat_team_{team.id}"
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            logger.debug("connect: user=%s joined groups: %s", self.user.id, ["chat_central", getattr(self.team, 'id', None) and f'chat_team_{self.team.id}'])
+        else:
+            # for convenience, set active room name to central
+            self.room_group_name = "chat_central"
 
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # ✅ Send latest pinned previews on connect
+        if self.user.is_authenticated:
+            await self.set_user_online(True)
+            await self.broadcast_online_status(True)
+
         recent = await self.get_recent_pinned(self.team)
         await self.send(text_data=json.dumps({
             "type": "pinned_preview",
@@ -165,12 +180,45 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     async def disconnect(self, close_code):
+        if self.user.is_authenticated:
+            await self.set_user_online(False)
+            await self.broadcast_online_status(False)
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+
+    @database_sync_to_async
+    def set_user_online(self, online: bool):
+        self.user.is_online = online
+        self.user.last_active = timezone.now()
+        self.user.save()
+
+    async def broadcast_online_status(self, online: bool):
+        message = {
+            "type": "user_online_status",
+            "user_id": self.user.id,
+            "is_online": online,
+        }
+
+        # Send to the ROOM this user is currently in
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {"type": "broadcast", "message": message}
+        )
+
+    async def broadcast(self, event):
+        await self.send(text_data=json.dumps(event["message"]))
 
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)
-            if data.get("action"):
+            if data.get("type") == "mark_read":
+                team_id = data.get("team_id")
+                if team_id:
+                    await self.mark_team_read(team_id)
+                    await self.send_unread_counts()
+                return
+            if data.get("type") == "get_unread_counts":
+                await self.send_unread_counts()
+            elif data.get("action"):
                 await self.handle_action(data)
             else:
                 # Always attach the current connection’s team
@@ -178,6 +226,47 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 await self.handle_new_message({**data, "team_id": team_id})
         except Exception as e:
             logger.error(f"WebSocket receive error: {e}")
+
+    async def send_unread_counts(self):
+        from .models import ChatMessage
+        from accounts.models import TeamMembership
+
+        user = self.scope["user"]
+        if not user.is_authenticated:
+            return
+
+        counts = {}
+
+        # Get all teams the user is a member of via TeamMembership
+        memberships = await sync_to_async(list)(TeamMembership.objects.filter(user=user).select_related('team'))
+        for membership in memberships:
+            team = membership.team
+            # Count unread messages for this team (excluding messages sent by user or already read)
+            unread = await sync_to_async(ChatMessage.objects.filter(
+                team=team
+            ).exclude(sender=user).exclude(read_by=user).count)()
+            counts[str(team.id)] = unread
+
+        await self.send(text_data=json.dumps({
+            "type": "unread_counts",
+            "counts": counts
+        }))
+
+    @database_sync_to_async
+    def mark_team_read(self, team_id):
+        from .models import ChatMessage
+        user = self.scope["user"]
+
+        qs = ChatMessage.objects.filter(
+            team_id=team_id
+        ).exclude(
+            sender=user
+        ).exclude(
+            read_by=user
+        )
+
+        for msg in qs:
+            msg.read_by.add(user)
 
     # ---------- Action Handler ----------
     async def handle_action(self, data):
@@ -231,6 +320,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # ---------- New Message Handler ----------
     async def handle_new_message(self, data):
+        from .models import Team
+
         sender_id = data.get("sender_id")
         message = data.get("message", "").rstrip()
         guest_id = data.get("guest_id")
@@ -245,8 +336,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         saved_message = await self.create_message(sender_id, message, guest_id, parent_id, mentions_ids, file_url, link_preview, team_id, file_data)
-        payload = {**saved_message, "type": "chat_message", "color": get_user_color(sender_id)}
-        await self.channel_layer.group_send(self.room_group_name, payload)
+        payload = {
+            **saved_message,
+            "type": "chat_message",
+            "color": get_user_color(sender_id),
+            "team_id": team_id
+        }
+        logger.debug("handle_new_message: team_id=%s broadcasting to team=%s and central", team_id, f"chat_team_{team_id}" if team_id else None)
+        # Broadcast to team if assigned
+        if team_id:
+            await self.channel_layer.group_send(f"chat_team_{team_id}", payload)
+
+        # Optionally, broadcast to central team
+        await self.channel_layer.group_send("chat_central", payload)
+        #await self.channel_layer.group_send(self.room_group_name, payload)
 
     # ---------- WebSocket Group Events ----------
     async def chat_message(self, event):
@@ -394,7 +497,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         try:
             sender = CustomUser.objects.get(id=sender_id)
-            team = Team.objects.filter(id=team_id).first() if team_id else None
+            team = None
+            if team_id and str(team_id).isdigit():
+                team = Team.objects.filter(id=int(team_id)).first()
             # enforce: guest_card only allowed for Magnet team
             guest_card = None
             if guest_id:
