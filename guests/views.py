@@ -1228,6 +1228,26 @@ def update_status_view(request, guest_id, status_key):
     return redirect('guest_list')
 
 
+from datetime import datetime
+
+def safe_date(value):
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).strftime("%Y-%m-%d")
+        except:
+            # Try flexible formats
+            for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+                try:
+                    return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+                except:
+                    pass
+            return value  # return raw string if all parsing fails
+    return value.strftime("%Y-%m-%d")
+
+
+
 
 
 @login_required
@@ -1267,18 +1287,17 @@ def export_guests_excel(request):
     ]
     ws.append(headers)
 
-    # Populate rows
     for guest in guests:
         ws.append([
             f"{guest.title} {guest.full_name}",
             guest.phone_number,
             guest.email,
             guest.gender,
-            guest.date_of_birth.strftime('%Y-%m-%d') if guest.date_of_birth else "",
+            safe_date(guest.date_of_birth),
             guest.marital_status,
             guest.home_address,
             guest.occupation,
-            guest.date_of_visit.strftime('%Y-%m-%d') if guest.date_of_visit else "",
+            safe_date(guest.date_of_visit),
             guest.purpose_of_visit,
             guest.channel_of_visit,
             guest.service_attended,
@@ -1288,13 +1307,19 @@ def export_guests_excel(request):
             guest.assigned_to.get_full_name() if guest.assigned_to else '',
         ])
 
-    # Direct download as Excel
+    # ---- ASGI-SAFE: Write to BytesIO first ----
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
     response = HttpResponse(
+        output.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = 'attachment; filename=guest_entries.xlsx'
-    wb.save(response)
     return response
+
 
 
 
