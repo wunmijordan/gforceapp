@@ -1008,6 +1008,18 @@ def update_guest_status(request, pk):
 
     return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
 
+@login_required
+def update_status_view(request, guest_id, status_key):
+    guest = get_object_or_404(GuestEntry, id=guest_id)
+
+    # Only allow if user is the creator or admin
+    if request.user != guest.assigned_to and not request.user.is_superuser:
+        return redirect('guest_list')  # or return an HTTP 403 Forbidden response
+
+    guest.status = status_key
+    guest.save()
+    return redirect('guest_list')
+
 
 
 def parse_flexible_date(date_str):
@@ -1213,19 +1225,6 @@ def export_csv(request):
         ])
 
     return response
-
-
-@login_required
-def update_status_view(request, guest_id, status_key):
-    guest = get_object_or_404(GuestEntry, id=guest_id)
-
-    # Only allow if user is the creator or admin
-    if request.user != guest.assigned_to and not request.user.is_superuser:
-        return redirect('guest_list')  # or return an HTTP 403 Forbidden response
-
-    guest.status = status_key
-    guest.save()
-    return redirect('guest_list')
 
 
 from datetime import datetime

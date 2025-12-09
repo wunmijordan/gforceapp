@@ -293,14 +293,11 @@
       {% else %}
 
 
-        <div class="row row-cards g-3" style= "overflow: visible !important;">
+        <div class="row row-cards g-3">
           {% for guest in page_obj %}
-          <div class="col-6 col-md-4 mb-5" 
-                data-custom-id="{{ guest.custom_id }}" id="guest-card-{{ guest.id }}"
-                style= "overflow: visible !important;">
+          <div class="col-6 col-md-4 mb-5" data-custom-id="{{ guest.custom_id }}" id="guest-card-{{ guest.id }}">
             <div class="card flex-fill h-100 border-0 pb-2"
-                  style="box-shadow: 0 4px 8px #000000d2; border-radius: 24px;
-                          overflow: visible !important; position: relative;">
+                  style="box-shadow: 0 4px 8px #000000d2; border-radius: 24px;">
 
               <!-- Card Header with custom ID left and dropdown right -->
               <div class="card-header border-0 pb-0 d-flex justify-content-between align-items-center">
@@ -320,41 +317,7 @@
                       <circle cx="12" cy="19" r="1" />
                     </svg>
                   </a>
-                  <div class="dropdown-menu dropdown-menu-end p-1">
-                    <a class="dropdown-item py-1 text-grey" href="{% url 'edit_guest' guest.id %}">Edit</a>
-                    {% if request.user.is_superuser or guest.assigned_to == request.user %}
-                      <a class="dropdown-item py-1 d-flex justify-content-between align-items-center" href="{% url 'followup_report_page' guest.id %}">
-                        Report
-                        <span class="badge bg-grey text-warning ms-2">{{ guest.reports.count }}</span>
-                      </a>
-                    {% elif guest.full_name == "Wunmi Jordan" %}
-                      <a class="dropdown-item py-1 d-flex justify-content-between align-items-center" href="{% url 'followup_report_page' guest.id %}">
-                        Report
-                        <span class="badge bg-grey text-warning ms-2">{{ guest.reports.count }}</span>
-                      </a>
-                    {% endif %}
-                    {% if request.user.is_superuser or guest.assigned_to == request.user %}
-                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#reviewModal-{{ guest.id }}">
-                        Respond to Review
-                      </a>
-                    {% elif guest.full_name == "Wunmi Jordan" %}
-                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#reviewModal-{{ guest.id }}">
-                        Respond to Review
-                      </a>
-                    {% endif %}
-
-                    {% if request.user|is_project_admin or request.user|is_magnet_admin:"Minister-in-Charge" %}
-                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#PastorreviewModal-{{ guest.id }}">
-                        Make Review
-                      </a>
-                    {% endif %}
-
-                    <!-- Trigger Single Guest Message Modal -->
-                    {% if request.user.is_superuser %}
-                      <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#guestMessageModal{{ guest.id }}">
-                        Send Message
-                      </a>
-                    {% endif %}
+                  <div class="card-menu dropdown-menu dropdown-menu-end p-1">
                     <a class="dropdown-item py-1 attach-to-chat" 
                       href="#"
                       data-id="{{ guest.id }}"
@@ -363,14 +326,92 @@
                       data-custom-id="{{ guest.custom_id|escapejs }}"
                       data-date="{{ guest.date_of_visit|date:'M d, Y' }}"
                       data-image="{% if guest.picture %}{{ guest.picture.url }}{% endif %}">
-                      Attach to Chat
+                      Attach Guest to Chat
                     </a>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item py-1 text-grey" href="{% url 'edit_guest' guest.id %}">
+                      Edit Guest Info
+                    </a>
+                    
+                    <a href="#"
+                      class="dropdown-item py-1 d-flex justify-content-between align-items-center status-popover-trigger"
+                      data-bs-toggle="popover"
+                      data-bs-placement="left"
+                      data-bs-html="true"
+                      data-guest="{{ guest.id }}"
+                      data-status="{{ guest.status|status_color }}"
+                      onclick="return false;"
+                      title="Select Guest Status"
+                      data-bs-content='
+                        {% if request.user|is_magnet_admin or guest.assigned_to == request.user %}
+                          {% for key, label in guest.STATUS_CHOICES %}
+                            <a class="dropdown-item fw-semibold text-{{ key|status_color }} {% if key == guest.status %}active-status{% endif %}"
+                              href="{% url "update_status" guest.id key %}">
+                              {{ label }}
+                              {% if key == guest.status %}
+                                <i class="ti ti-check ms-auto"></i>
+                              {% endif %}
+                            </a>
+                          {% endfor %}
+                        {% elif guest.full_name == "Wunmi Jordan" and request.user|has_group:"Demo" %}
+                          {% for key, label in guest.STATUS_CHOICES %}
+                            <a class="dropdown-item fw-semibold text-{{ key|status_color }} {% if key == guest.status %}active-status{% endif %}"
+                              href="{% url "update_status" guest.id key %}">
+                              {{ label }}
+                              {% if key == guest.status %}
+                                <i class="ti ti-check ms-auto"></i>
+                              {% endif %}
+                            </a>
+                          {% endfor %}
+                        {% endif %}
+                      '>
+                      Update Guest Status
+                      <i class="ti ti-chevron-left"></i>
+                    </a>
+
+                    <div class="dropdown-divider"></div>
+                    {% if request.user|is_project_admin or request.user|is_magnet_admin:"Minister-in-Charge" %}
+                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#PastorreviewModal-{{ guest.id }}">
+                        Make Review on Guest
+                      </a>
+                    {% endif %}
+                    {% if request.user.is_superuser or guest.assigned_to == request.user %}
+                      <a class="dropdown-item py-1 d-flex justify-content-between align-items-center" href="{% url 'followup_report_page' guest.id %}">
+                        Make Report on Guest
+                        <span class="badge bg-grey text-warning ms-2">{{ guest.reports.count }}</span>
+                      </a>
+                    {% elif guest.full_name == "Wunmi Jordan" %}
+                      <a class="dropdown-item py-1 d-flex justify-content-between align-items-center" href="{% url 'followup_report_page' guest.id %}">
+                        Make Report on Guest
+                        <span class="badge bg-grey text-warning ms-2">{{ guest.reports.count }}</span>
+                      </a>
+                    {% endif %}
+                    {% if request.user.is_superuser or guest.assigned_to == request.user %}
+                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#reviewModal-{{ guest.id }}">
+                        Respond to Review
+                      </a>
+                    {% elif guest.full_name == "Wunmi Jordan" %}
+                      <a class="dropdown-item py-1" href="#" data-bs-toggle="modal" data-bs-target="#reviewModal-{{ guest.id }}">
+                        Respond to Review
+                      </a>
+                    {% endif %}
+
+                    
+                    <div class="dropdown-divider"></div>
+
+                    <!-- Trigger Single Guest Message Modal -->
+                    {% if request.user.is_superuser %}
+                      <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#guestMessageModal{{ guest.id }}">
+                        Send Message to Guest
+                      </a>
+                    {% endif %}
+                    
                   </div>
                 </div>
               </div>
 
               <!-- Card Body -->
-              <div class="card-body position-relative" style="padding-bottom: 80px; overflow: visible !important;">
+              <div class="card-body position-relative" style="padding-bottom: 50px;">
                 <div class="row align-items-start mb-2">
                   <div class="col-6 pt-2 mb-2 text-center position-relative" style="width: 140px;">
                     <!-- Guest Avatar / Picture with Preview Modal Trigger -->
@@ -600,8 +641,8 @@
                   {% endif %}
                 </div>
 
-                <div class="mt-2 status-btn-wrapper gap-2 bottom-0 start-50 translate-middle-x pb-2"
-                      style="position: absolute !important; z-index: 1050 !important;">
+                <div class="mt-1 position-absolute pb-2"
+                      style="right: 20px; bottom: 1px;">
                   <!-- Badges -->
                   <div class="d-flex" style="justify-content: center; align-items: center;">
                     {% if request.user|is_magnet_admin %}
@@ -609,17 +650,17 @@
                         <!-- Assigned User Avatar (right side of name row) -->
                         {% if guest.assigned_to.image %}
                           <span class="avatar"
-                                style="width: 18px; height: 18px; 
+                                style="width: 32px; height: 32px; 
                                       background-image: url('{{ guest.assigned_to.image.url }}'); 
                                       background-size: cover; 
                                       background-position: center;
                                       border-radius:6px;
-                                      box-shadow: 0 2px 4px #000000b3;">
+                                      box-shadow: 0 4px 8px #000000d2;">
                           </span>
                         {% endif %}
-                        <div class="badge {{ guest.assigned_to.color_class }} ms-1 px-2 rounded-2"
-                              style="font-size: 0.6rem; box-shadow: 0 2px 4px #000000b3; 
-                                    font-style: italic;">
+                        <div class="badge {{ guest.assigned_to.color_class }} ms-1 px-2 py-2"
+                              style="font-size: 0.6rem; box-shadow: 0 4px 8px #000000d2; 
+                                    font-style: italic; border-radius: 0 24px 24px 0">
                           {{ guest.assigned_to.title|default:"" }} {{ guest.assigned_to.full_name }}
                         </div>
                       {% endif %}
@@ -627,11 +668,39 @@
                       {% if guest.assigned_to %}
                       {% endif %}
                     {% endif %}
-                  </div>                 
+                  </div> 
+                </div>                
 
-                  <!-- Card Actions -->
-                  <div class="mt-2">
-                    {% if request.user|is_magnet_admin or guest.assigned_to == request.user %}
+                  <!-- Guest Status Update -->
+                <div class="mt-1 position-absolute pb-2"
+                      style="bottom: 32px; left: 0;">
+                  <div class="my-3">
+                    <div class="ribbon ribbon-start gap-1 text-uppercase fw-bold bg-{{ guest.get_status_color|default:'gray-800' }} text-white d-flex"
+                          style="box-shadow: 0 4px 8px #000000d2; max-width: 500px; font-size: 0.7rem; border-radius: 0 24px 24px 12px;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-progress">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 20.777a8.942 8.942 0 0 1 -2.48 -.969" />
+                        <path d="M14 3.223a9.003 9.003 0 0 1 0 17.554" /><path d="M4.579 17.093a8.961 8.961 0 0 1 -1.227 -2.592" />
+                        <path d="M3.124 10.5c.16 -.95 .468 -1.85 .9 -2.675l.169 -.305" /><path d="M6.907 4.579a8.954 8.954 0 0 1 3.093 -1.356" />
+                      </svg>
+                      {{ guest.status|default:"New Guest" }}
+
+                      <a href="#"
+                        class="py-1 d-flex justify-content-between align-items-center info-popover-trigger"
+                        data-bs-toggle="popover"
+                        data-bs-placement="top"
+                        data-bs-html="true"
+                        data-bs-content='
+                          Click
+                          <i class="bi bi-three-dots-vertical"></i>
+                          on the top-right corner, to update Guest Status
+                        '>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#ffffff" class="icon icon-tabler icons-tabler-filled icon-tabler-info-square-rounded">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M12 2l.642 .005l.616 .017l.299 .013l.579 .034l.553 .046c4.687 .455 6.65 2.333 7.166 6.906l.03 .29l.046 .553l.041 .727l.006 .15l.017 .617l.005 .642l-.005 .642l-.017 .616l-.013 .299l-.034 .579l-.046 .553c-.455 4.687 -2.333 6.65 -6.906 7.166l-.29 .03l-.553 .046l-.727 .041l-.15 .006l-.617 .017l-.642 .005l-.642 -.005l-.616 -.017l-.299 -.013l-.579 -.034l-.553 -.046c-4.687 -.455 -6.65 -2.333 -7.166 -6.906l-.03 -.29l-.046 -.553l-.041 -.727l-.006 -.15l-.017 -.617l-.004 -.318v-.648l.004 -.318l.017 -.616l.013 -.299l.034 -.579l.046 -.553c.455 -4.687 2.333 -6.65 6.906 -7.166l.29 -.03l.553 -.046l.727 -.041l.15 -.006l.617 -.017c.21 -.003 .424 -.005 .642 -.005zm0 9h-1l-.117 .007a1 1 0 0 0 0 1.986l.117 .007v3l.007 .117a1 1 0 0 0 .876 .876l.117 .007h1l.117 -.007a1 1 0 0 0 .876 -.876l.007 -.117l-.007 -.117a1 1 0 0 0 -.764 -.857l-.112 -.02l-.117 -.006v-3l-.007 -.117a1 1 0 0 0 -.876 -.876l-.117 -.007zm.01 -3l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007z" />
+                        </svg>
+                      </a>
+                    </div>
+                    <!--{% if request.user|is_magnet_admin or guest.assigned_to == request.user %}
                       <div class="dropdown">
                         <a href="#"
                           class="btn btn-md btn-gray border-0 dropup text-uppercase fw-bold text-{{ guest.get_status_color }}"
@@ -673,7 +742,7 @@
                           </ul>
                         </div>
                       </div>
-                    {% endif %}
+                    {% endif %}-->
                   </div>
                 </div>
               </div>
@@ -1530,6 +1599,67 @@ document.addEventListener("DOMContentLoaded", function() {
       console.warn("Activity log failed:", err);
     }
   }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // initialize all status popovers
+    document.querySelectorAll('.status-popover-trigger').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault(); 
+        e.stopPropagation(); // CRITICAL: keeps dropdown open
+      });
+      let statusColor = el.dataset.status;
+      new bootstrap.Popover(el, {
+        trigger: 'click',
+        sanitize: false,   // allow html
+        html: true,
+        customClass: `status-popover-${statusColor}`
+      });
+    });
+
+    // Close popovers when clicking a status link inside them (so the dropdown menu doesn't remain open)
+    document.body.addEventListener('click', function (e) {
+      // if a link inside a popover was clicked, hide any visible popovers
+      if (e.target.closest('.popover .dropdown-item')) {
+        document.querySelectorAll('.status-popover-trigger').forEach(function (el) {
+          let pop = bootstrap.Popover.getInstance(el);
+          if (pop) pop.hide();
+        });
+      }
+
+      // optional: clicking outside should close any open popovers (Bootstrap mostly handles this,
+      // but this ensures it when inside dropdown menus)
+      if (!e.target.closest('.status-popover-trigger') && !e.target.closest('.popover')) {
+        document.querySelectorAll('.status-popover-trigger').forEach(function (el) {
+          let pop = bootstrap.Popover.getInstance(el);
+          if (pop) pop.hide();
+        });
+      }
+    }, true);
+
+    // Status info popovers
+    document.querySelectorAll('.info-popover-trigger').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault(); 
+        e.stopPropagation(); // CRITICAL: keeps dropdown open
+      });
+      new bootstrap.Popover(el, {
+        trigger: 'click',
+        sanitize: false,   // allow html
+        html: true,
+      });
+    });
+
+    document.body.addEventListener('click', function (e) {
+      // optional: clicking outside should close any open popovers (Bootstrap mostly handles this,
+      // but this ensures it when inside dropdown menus)
+      if (!e.target.closest('.info-popover-trigger') && !e.target.closest('.popover')) {
+        document.querySelectorAll('.info-popover-trigger').forEach(function (el) {
+          let pop = bootstrap.Popover.getInstance(el);
+          if (pop) pop.hide();
+        });
+      }
+    }, true);
+  });
 </script>
 
 {% endblock %}

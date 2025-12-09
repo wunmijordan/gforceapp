@@ -243,9 +243,14 @@ AUTH_USER_MODEL = "accounts.CustomUser"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
-SESSION_ENGINE = "django.contrib.sessions.backends.db"
+# Use Redis-backed cached sessions (fixes DB overload)
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+# Only refresh session when needed
+SESSION_SAVE_EVERY_REQUEST = False
+
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 28  # 28 days
-SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 CONN_MAX_AGE = 600  # DB persistent connections
 

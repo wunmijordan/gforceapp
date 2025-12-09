@@ -318,9 +318,9 @@
                 </span>
               {% endif %}
 
-              <div class="ps-2 d-flex flex-column justify-content-center">
-                <!--<div class="d-block d-xl-none">{{ user.get_full_name|default:user.full_name }}</div>--> <!-- Show on mobile -->
-                <div class="d-none d-xl-block"><i><small>{{ user.title|default:"" }}</small></i><br> {{ user.full_name }}</div> <!-- Show on xl+ -->
+              <!--<div class="ps-2 d-flex flex-column justify-content-center">
+                <div class="d-block d-xl-none">{{ user.get_full_name|default:user.full_name }}</div>--> <!-- Show on mobile --
+                <div class="d-none d-xl-block"><i><small>{{ user.title|default:"" }}</small></i><br> {{ user.full_name }}</div>  Show on xl+ -->
 
                 <!--
                 <div class="d-block d-xl-none mt-1 fs-6 text-secondary">
@@ -334,7 +334,7 @@
                     <span class="badge bg-gray-lt">Sign-In</span>
                   {% endif %}
                 </div>
-                -->
+                
 
                 <div class="d-none d-xl-block mt-1 fs-6 text-secondary">
                   {% if user.is_superuser %}
@@ -351,7 +351,7 @@
                     <span class="text-red">Demo</span>
                   {% endif %}
                 </div>
-              </div>
+              </div>-->
             </a>
             <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow py-1">
               <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#notifSettingsModal">
@@ -413,7 +413,7 @@
               {% endif %}
             </li>
             {% if request.user.is_superuser %}
-              <li class="nav-item">
+              <li class="nav-item ms-1">
                 <a class="nav-link text-white" href="{% url 'accounts:manage_groups' %}">
                   <span class="nav-link-icon d-md-none d-lg-inline-block">
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-hierarchy">
@@ -428,7 +428,7 @@
               </li>
             {% endif %}
             {% if request.user|is_project_admin or request.user|is_magnet_admin:"Minister-in-Charge,Team Admin" or request.user|is_team_admin:"Minister-in-Charge" %}
-              <li class="nav-item">
+              <li class="nav-item ms-1">
                 <a class="nav-link text-white" href="{% url 'accounts:user_list' %}">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#02bd12ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-users-group">
@@ -442,7 +442,7 @@
               </li>
             {% endif %}
             {% if not request.user.is_superuser and request.user|in_team:"Magnet" %}
-              <li class="nav-item">
+              <li class="nav-item ms-1">
                 <a class="nav-link text-white" href="{% url 'guest_list' %}">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff5e01ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-users">
@@ -454,7 +454,7 @@
                 </a>
               </li>
             {% elif request.user.is_superuser %}
-              <li class="nav-item dropdown py-1">
+              <li class="nav-item ms-1 dropdown py-1">
                 <a class="nav-link dropdown text-white" href="#guest" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff5e01ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-users">
@@ -484,7 +484,7 @@
               </li>
             {% endif %}
             {% if request.user.is_superuser %}
-              <li class="nav-item dropdown">
+              <li class="nav-item ms-1 dropdown">
                 <!-- Bulk Message Trigger Button -->
                 <a class="nav-link text-white" href="#" data-bs-toggle="modal" data-bs-target="#bulkMessageModal">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
@@ -498,7 +498,7 @@
               </li>
             {% endif %}
             {% if request.user|is_project_admin or request.user|in_team:"Magnet" %}
-              <li class="nav-item dropdown py-1">
+              <li class="nav-item ms-1 dropdown py-1">
                 <a class="nav-link dropdown text-white" href="#share" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/checkbox -->
                     <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#00ffb3ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-share">
@@ -555,7 +555,7 @@
             {% endif %}
             
             {% if show_filters %}
-            <li class="nav-item dropdown me-2 py-1">
+            <li class="nav-item dropdown ms-1 py-1">
               <a class="nav-link dropdown text-white" href="#navbar-filter" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
                 <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/package -->
                   <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#ff0055ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-filters">
@@ -612,7 +612,7 @@
             </li>
             {% endif %}
             {% if request.user|is_project_admin or request.user|is_team_admin:"Minister-in-Charge" %}
-              <li class="nav-item">
+              <li class="nav-item ms-1">
                 <a class="nav-link text-white" href="{% url 'workforce:manage_events' %}">
                   <span class="nav-link-icon d-md-none d-lg-inline-block"><!-- Download SVG icon from http://tabler.io/icons/icon/home -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59f00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-calendar-cog">
@@ -628,7 +628,7 @@
                 </a>
               </li>
             {% endif %}
-            <li class="nav-item">
+            <li class="nav-item ms-1">
               <a href="{% url 'workforce:chat_room' %}" class="nav-link text-white" aria-label="ChatRoom">
                 <span class="nav-link-icon d-md-none d-lg-inline-block">
                   <svg  xmlns="http://www.w3.org/2000/svg"  width="24"  height="24"  viewBox="0 0 24 24"  fill="none"  stroke="#f703d7ff"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round"  class="icon icon-tabler icons-tabler-outline icon-tabler-armchair">

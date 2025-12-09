@@ -108,8 +108,8 @@ class GuestEntry(models.Model):
       'Planted Elsewhere': 'danger',
       'Relocated': 'primary',
       'Work in Progress': 'warning',
-      'Select Status': 'secondary',
-    }.get(self.status, 'secondary')
+      'New Guest': 'gray-800',
+    }.get(self.status, 'gray-800')
 
   def __str__(self):
     return f"{self.custom_id} - {self.full_name}"

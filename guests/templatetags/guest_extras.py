@@ -4,13 +4,14 @@ register = template.Library()
 
 @register.filter
 def status_color(value):
-    return {
-        'select_status': 'primary',
-        'planted': 'secondary',
-        'planted_elsewhere': 'success',
-        'relocated': 'danger',
-        'work_in_progress': 'warning',
-    }.get(value, 'primary')  # Default to primary if status not recognized
+    mapping = {
+        'Planted': 'success',
+        'Planted Elsewhere': 'danger',
+        'Relocated': 'primary',
+        'Work in Progress': 'warning',
+        'New Guest': 'gray-800',
+    }
+    return mapping.get(value, 'gray-800')
 
 
 @register.filter

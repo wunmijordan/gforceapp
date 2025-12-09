@@ -210,19 +210,7 @@ Reduce padding on tablets so items fit */
     position: relative;
   }
 
-  .navbar-nav .dropend .dropdown-menu {
-    position: absolute !important;
-    top: 0;
-    left: 100%;
-    margin-top: 0;
-    margin-left: 0.1rem;
-    display: none;
-    opacity: 0;
-    visibility: hidden;
-    transform: none;
-    z-index: 3000 !important;           /* navbar dropends above page header */
-  }
-
+  
   .navbar-nav .dropend:hover > .dropdown-menu {
     display: block !important;
     opacity: 1 !important;
@@ -434,8 +422,8 @@ Reduce padding on tablets so items fit */
   overflow: visible !important;
 }
 
-.dropdown-menu {
-  z-index: 2000 !important;       /* guest card dropdowns below page header filters */
+.card-menu.dropdown-menu {
+  z-index: 1050 !important;       /* guest card dropdowns below page header filters */
 }
 
 .icon.rotate {
@@ -2253,5 +2241,63 @@ Dashboard Event Carousel
   animation: wiggle 0.6s infinite;
   transform-origin: center;
 }
+
+/* ==================GUEST STATUS POPOVER DROPDOWN ================== */
+.popover {
+  border-radius: 10px;
+  min-width: 180px;
+}
+
+.popover .popover-body {
+  padding: 6px;
+}
+
+.popover .dropdown-item {
+  padding: 8px 12px;
+  color: inherit;
+}
+
+.popover .dropdown-item:hover {
+  background-color: rgba(255,255,255,0.03);
+}
+
+.popover .dropdown-item.active-status {
+    background-color: rgba(255,255,255,0.08);
+    font-weight: 600;
+    border-left: 6px solid currentColor;  /* <-- Uses the item's text color */
+    border-radius: 6px;                  /* <-- Rounded edge */
+    padding-left: 14px;                  /* <-- Prevent text from touching border */
+}
+
+/* Background for title based on active status color */
+.status-popover-success.show .popover-header {
+  background: var(--tblr-success);
+  color: #fff;
+}
+.status-popover-danger.show .popover-header {
+  background: var(--tblr-danger);
+  color: #fff;
+}
+.status-popover-warning.show .popover-header {
+  background: var(--tblr-warning);
+  color: #fff;
+}
+.status-popover-primary.show .popover-header {
+  background: var(--tblr-primary);
+  color: #fff;
+}
+.status-popover-gray.show .popover-header {
+  background: var(--tblr-gray);
+  color: #fff;
+}
+
+/* Optional: style header */
+.popover-header {
+  font-weight: 600;
+  border-bottom: none;
+}
+
+
+
 
 
